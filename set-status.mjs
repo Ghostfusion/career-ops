@@ -451,7 +451,12 @@ const note = flags.note != null ? cell(flags.note) : null;
 const parts = lines[target.lineIdx].split('|').map(s => s.trim());
 while (parts.length <= Math.max(colmap.status, colmap.notes ?? 0)) parts.push('');
 
-const statusChanged = parts[colmap.status] !== newStatus;
+// Canonical-equality check, not raw string equality: re-running with an alias
+// or different case ("applied" vs "Applied") against a row already in that
+// state must be a true no-op — no rewrite, no phantom status-log transition
+// that funnel-velocity.mjs would read as a real event.
+const existingCanonical = resolveCanonicalState(parts[colmap.status], states);
+const statusChanged = existingCanonical !== newStatus;
 parts[colmap.status] = newStatus;
 
 let noteChanged = false;

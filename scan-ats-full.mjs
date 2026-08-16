@@ -781,6 +781,14 @@ async function main() {
         await withTimeout((async () => {
           const jobs = await source.provider.fetch(entry, ctx);
           consecutiveResolverFailures = 0;
+          // A misbehaving provider can resolve to a parseable non-array (e.g.
+          // {data: [...]}) — reading the flags below off a non-array would then
+          // either crash (jobs.length is undefined) or miscount the board as a
+          // fetch failure. Normalize up front so the error is a clean
+          // "did not return an array" instead of a confusing per-company failure.
+          if (!Array.isArray(jobs)) {
+            throw new Error(`${source.provider.id}: fetch() did not return an array`);
+          }
           if (jobs.workdayTruncated) truncated.push(entry);
           if (jobs.icimsTruncated) {
             cappedBoards++;

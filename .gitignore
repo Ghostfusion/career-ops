@@ -151,3 +151,12 @@ documents/*
 # Intake fingerprints — the recorded source filenames may themselves carry
 # PII (e.g. cv/jane-doe-master-cv.pdf). #1723
 data/intake-state.json
+
+# Local personal data (never commit — machine-local PII / caches)
+.venv/
+.linkedin-profile/
+linkedin-profile.txt
+linkedin-profile-details.txt
+# Instance-specific usage guide — written for this checkout's candidate
+# (name, contact, comp targets) and not part of the shared docs.
+docs/USAGE.md

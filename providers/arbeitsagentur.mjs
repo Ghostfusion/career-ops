@@ -28,6 +28,9 @@
 //                               #   'title'  — regex on the job title only (cheap; misses body-level remote)
 //                               #   'off'    — skip the remote pass entirely
 //       remoteMaxPages: 10      # 'filter' mode: max pages to paginate (size each); default 1
+//       maxPages: 5             # Pass A: max keyword pages to paginate (size each); default 1.
+//                               # A popular keyword ("Engineer") can match >100 postings; without
+//                               # pagination the primary pass silently caps at the first page.
 //     enabled: true
 
 // v6. The v4 search and detail endpoints both 404 as of 2026-08-04 (#2494);
@@ -50,7 +53,7 @@ function intInRange(val, def, min, max) {
 /**
  * Reads and sanitizes the entry's `arbeitsagentur:` config block.
  * @param {{ arbeitsagentur?: any }} entry
- * @returns {{ keywords: string[], wo: string, umkreis: number, days: number, size: number, remoteNationwide: boolean, remoteMatch: 'title'|'filter'|'off', remoteMaxPages: number }}
+ * @returns {{ keywords: string[], wo: string, umkreis: number, days: number, size: number, remoteNationwide: boolean, remoteMatch: 'title'|'filter'|'off', remoteMaxPages: number, maxPages: number }}
  */
 export function parseArbeitsagenturConfig(entry) {
   const cfg = (entry && entry.arbeitsagentur) || {};
@@ -67,6 +70,9 @@ export function parseArbeitsagenturConfig(entry) {
     // Remote-detection mode is config-driven (not hardcoded).
     remoteMatch: ['title', 'filter', 'off'].includes(cfg.remoteMatch) ? cfg.remoteMatch : 'title',
     remoteMaxPages: intInRange(cfg.remoteMaxPages, 1, 1, 20),
+    // Pass A pagination cap (default 1 preserves the historical single-page
+    // behavior; raise to walk popular keywords past the 100-result ceiling).
+    maxPages: intInRange(cfg.maxPages, 1, 1, 50),
   };
 }
 
@@ -148,28 +154,34 @@ export default {
    * @returns {Promise<Array<{title: string, url: string, company: string, location: string}>>}
    */
   async fetch(entry, ctx) {
-    const { keywords, wo, umkreis, days, size, remoteNationwide, remoteMatch, remoteMaxPages } = parseArbeitsagenturConfig(entry);
+    const { keywords, wo, umkreis, days, size, remoteNationwide, remoteMatch, remoteMaxPages, maxPages } = parseArbeitsagenturConfig(entry);
     if (!keywords.length) {
       throw new Error(`arbeitsagentur: entry "${entry.name || '(unnamed)'}" has no arbeitsagentur.keywords[]`);
     }
 
     /** @param {string} was @param {Record<string,string>} [extra] */
-    const fetchKeyword = async (was, extra = {}) => {
-      const params = new URLSearchParams({
-        was,
-        size: String(size),
-        page: '1',
-        angebotsart: '1', // 1 = ARBEIT (employment; excludes Ausbildung/Selbständigkeit)
-        veroeffentlichtseit: String(days),
-        ...extra,
-      });
-      // redirect:'error' prevents SSRF via server-side redirects.
-      const json = await ctx.fetchJson(`${API_URL}?${params.toString()}`, {
-        headers: { 'X-API-Key': API_KEY, accept: 'application/json' },
-        redirect: 'error',
-        timeoutMs: 12_000,
-      });
-      return Array.isArray(json && json.ergebnisliste) ? json.ergebnisliste : [];
+    const fetchKeyword = async (was, extra = {}, pageCap = 1) => {
+      const pages = [];
+      for (let page = 1; page <= pageCap; page++) {
+        const params = new URLSearchParams({
+          was,
+          size: String(size),
+          page: String(page),
+          angebotsart: '1', // 1 = ARBEIT (employment; excludes Ausbildung/Selbständigkeit)
+          veroeffentlichtseit: String(days),
+          ...extra,
+        });
+        // redirect:'error' prevents SSRF via server-side redirects.
+        const json = await ctx.fetchJson(`${API_URL}?${params.toString()}`, {
+          headers: { 'X-API-Key': API_KEY, accept: 'application/json' },
+          redirect: 'error',
+          timeoutMs: 12_000,
+        });
+        const results = Array.isArray(json && json.ergebnisliste) ? json.ergebnisliste : [];
+        pages.push(...results);
+        if (results.length < size) break; // short page → done
+      }
+      return pages;
     };
 
     const byRef = new Map();
@@ -179,9 +191,10 @@ export default {
       let primary;
       try {
         // Pass A: commutable radius around `wo`, or a single nationwide pass.
+        // Paginate up to maxPages so popular keywords aren't capped at one page.
         primary = wo
-          ? await fetchKeyword(kw, { wo, umkreis: String(umkreis) })
-          : await fetchKeyword(kw);
+          ? await fetchKeyword(kw, { wo, umkreis: String(umkreis) }, maxPages)
+          : await fetchKeyword(kw, {}, maxPages);
         succeeded++;
       } catch (err) {
         // Recall-first: tolerate a single failed keyword and keep going.
@@ -201,12 +214,9 @@ export default {
           if (remoteMatch === 'filter') {
             // Server-side home-office filter: collect the candidates. `nv_true` only
             // means "home office is possible", so these are not yet known to be
-            // remote — the title check below is what decides.
-            for (let page = 1; page <= remoteMaxPages; page++) {
-              const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page) });
-              wide.push(...res);
-              if (res.length < size) break; // short page → done
-            }
+            // remote — the title check below is what decides. fetchKeyword now
+            // paginates internally up to remoteMaxPages, stopping on a short page.
+            wide = await fetchKeyword(kw, { homeoffice: 'nv_true' }, remoteMaxPages);
           } else { // 'title'
             const nationwide = await fetchKeyword(kw);
             wide = nationwide.filter(j => REMOTE_RE.test(String((j && j.stellenangebotsTitel) || '')));

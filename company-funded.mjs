@@ -811,12 +811,19 @@ async function fetchHnDiscovery({ months = DEFAULT_MONTHS, diagnostics = [] } = 
 async function collectDiscoveryItems(opts, diagnostics) {
   const requested = new Set(opts.sources || DEFAULT_SOURCES);
   const hits = [];
+  // The RSS sources and HN are independent, SSRF-guarded fetches. Running them
+  // sequentially cost up to ~2 minutes of serial network time on a cold run
+  // (each fetch can wait out its 12s timeout). Run the source groups
+  // concurrently — the per-fetch timeouts still bound total runtime.
+  const tasks = [];
   for (const source of ['techcrunch', 'prnewswire', 'guardian']) {
-    if (requested.has(source)) hits.push(...await fetchRssDiscovery(source, diagnostics));
+    if (requested.has(source)) tasks.push(fetchRssDiscovery(source, diagnostics));
   }
   if (requested.has('hn')) {
-    hits.push(...await fetchHnDiscovery({ months: opts.months, diagnostics }));
+    tasks.push(fetchHnDiscovery({ months: opts.months, diagnostics }));
   }
+  const results = await Promise.all(tasks);
+  for (const group of results) hits.push(...group);
   return hits;
 }
 
@@ -1013,6 +1020,14 @@ async function main() {
   if (!opts.dryRun) result.artifacts = writeArtifacts(result);
   if (opts.json) console.log(JSON.stringify(result, null, 2));
   else printHuman(result);
+  // Total source failure: every source fetched 0 items (dead feeds, blocked
+  // pages, network outage). Exit non-zero so scripted/CI callers don't mistake
+  // an empty artifact for a healthy "no funding news this window" result.
+  const totalFetched = result.diagnostics.reduce((sum, d) => sum + (d.fetched_items || 0), 0);
+  if (totalFetched === 0 && result.companies.length === 0) {
+    console.error(`\ncompany-funded: all ${result.sources.length} source(s) fetched 0 items — check connectivity/feeds before treating this as a clean result.`);
+    process.exit(2);
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {

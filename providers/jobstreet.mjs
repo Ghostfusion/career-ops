@@ -29,6 +29,11 @@ const DEFAULT_API = 'https://id.jobstreet.com/api/jobsearch/v5/search';
 const DEFAULT_SITE_KEY = 'ID-Main';
 const DEFAULT_PAGE_SIZE = 30;
 const DEFAULT_MAX_PAGES = 3;
+// Job URL path per market: the Indonesian jobstreet uses /id/job/{id}; the
+// SEEK AU/NZ and SG/MY jobstreet sites use the bare /job/{id} form. Hardcoding
+// /id/job/ for every market produced 404 posting URLs on the non-ID origins
+// (which the allowlist above also admits).
+const MAX_PAGES_CAP = 100;
 
 const ALLOWED_JOBSTREET_HOSTS = new Set([
   'id.jobstreet.com',
@@ -116,10 +121,14 @@ export function parseJobstreetItem(item, origin, fallbackCompany) {
   const title = (item.title || '').trim();
   if (!title) return null;
 
-  // Build job URL from the job ID
+  // Build job URL from the job ID. The path segment is market-dependent:
+  // id.jobstreet.com uses /id/job/{id}, every other allowed origin (sg./my.
+  // jobstreet, www.seek.com.au / .co.nz) uses /job/{id}.
   const jobId = (item.id || '').trim();
   if (!jobId) return null;
-  const url = `${origin}/id/job/${jobId}`;
+  const host = new URL(origin).hostname;
+  const pathPrefix = host === 'id.jobstreet.com' ? '/id/job/' : '/job/';
+  const url = `${origin}${pathPrefix}${jobId}`;
 
   // Validate URL hostname belongs to allowed set
   try {
@@ -175,7 +184,7 @@ export default {
     const keywords = entry.searchKeywords || '';
     const searchLocation = entry.searchLocation || '';
     const pageSize = Number(entry.pageSize) || DEFAULT_PAGE_SIZE;
-    const maxPages = Number(entry.maxPages) || DEFAULT_MAX_PAGES;
+    const maxPages = Math.min(Number(entry.maxPages) || DEFAULT_MAX_PAGES, MAX_PAGES_CAP);
     const fallbackCompany = entry.name || '';
 
     const allJobs = [];

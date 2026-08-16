@@ -478,15 +478,21 @@ async function runAdd(name, { fetchJson }) {
   const hits = [];
   for (const slug of candidates) {
     for (const ats of Object.keys(ATS)) {
-      const r = await probeSlug(ats, slug, { fetchJson });
-      if (r.status !== 'missing') {
-        hits.push(r);
-        console.log(
-          `  ${ICON[r.status]} ${ats}: ${slug}` +
-            (r.status === 'empty'
-              ? ' (live but empty)'
-              : ` (${r.jobCount} jobs)`),
-        );
+      // Lever has a separate EU host (jobs.eu.lever.co): probe both, mirroring
+      // discoverAlternates — otherwise an EU-only Lever tenant is
+      // undiscoverable via --add (and gets reported as "missing").
+      const euVariants = ats === 'lever' ? [false, true] : [false];
+      for (const eu of euVariants) {
+        const r = await probeSlug(ats, slug, { fetchJson, eu });
+        if (r.status !== 'missing') {
+          hits.push(r);
+          console.log(
+            `  ${ICON[r.status]} ${ats}${eu ? ' (EU)' : ''}: ${slug}` +
+              (r.status === 'empty'
+                ? ' (live but empty)'
+                : ` (${r.jobCount} jobs)`),
+          );
+        }
       }
     }
   }

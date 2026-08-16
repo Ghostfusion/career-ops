@@ -111,7 +111,7 @@ export default {
 
     const jobs = [];
     let from = 0;
-    const maxPages = Number(entry.max_pages || MAX_PAGES);
+    const maxPages = Math.min(Number(entry.max_pages || MAX_PAGES) || MAX_PAGES, 100);
     for (let page = 0; page < maxPages; page++) {
       const url = buildApiUrl(entry, from);
       const json = await ctx.fetchJson(url, { redirect: 'error' });

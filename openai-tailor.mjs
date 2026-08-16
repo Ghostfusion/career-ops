@@ -307,8 +307,27 @@ try {
   process.exit(1);
 }
 
-// Clean up markdown block wrapping if the LLM adds it despite instructions
-tailoredHtml = tailoredHtml.replace(/^\s*```(html)?\s*/i, '').replace(/\s*```\s*$/, '');
+// Clean up markdown block wrapping if the LLM adds it despite instructions.
+// A bare leading-fence strip lets prose before the ``` block survive into the
+// output as invalid leading HTML — slice between the FIRST and LAST fence
+// instead, so only the fenced block is kept.
+const fenceBlocks = tailoredHtml.match(/```(?:html)?\s*([\s\S]*?)```/gi);
+if (fenceBlocks && fenceBlocks.length > 0) {
+  tailoredHtml = fenceBlocks.map((b) => b.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '')).join('\n');
+} else {
+  tailoredHtml = tailoredHtml.replace(/^\s*```(html)?\s*/i, '').replace(/\s*```\s*$/, '');
+}
+
+// Sanitize the LLM-produced HTML before it is written to disk: the CV payload
+// was built from an untrusted JD (data, never instructions), and an injected
+// <script> / on*= handler would otherwise land executable markup in the saved
+// CV file. Strip executable tags and event-handler attributes.
+tailoredHtml = tailoredHtml
+  .replace(/<\s*script[\s\S]*?<\/\s*script\s*>/gi, '')
+  .replace(/<\s*iframe[\s\S]*?<\/\s*iframe\s*>/gi, '')
+  .replace(/<\s*object[\s\S]*?<\/\s*object\s*>/gi, '')
+  .replace(/\bon[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  .replace(/\s*javascript\s*:/gi, ' ');
 
 // ---------------------------------------------------------------------------
 // Save tailored HTML

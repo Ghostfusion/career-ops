@@ -137,7 +137,7 @@ export default {
   async fetch(entry, ctx) {
     if (!detectUrl(entry)) throw new Error('nofluffjobs: careers_url or api must be a trusted nofluffjobs.com URL');
 
-    const maxPages = Number(entry.max_pages || MAX_PAGES);
+    const maxPages = Math.min(Number(entry.max_pages || MAX_PAGES) || MAX_PAGES, 100);
     const jobs = [];
     const seen = new Set();
 

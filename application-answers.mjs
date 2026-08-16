@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
+import { resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export const APPLICATION_ANSWERS_HEADING = '## Application Answers';
 
@@ -209,8 +211,21 @@ async function main() {
     state: args.state || input.state,
   };
   const reportPath = resolve(args.report);
+  // Containment: --report is a read+overwrite primitive; constrain it to
+  // reports/ so a crafted argument (or untrusted headless prompt) can't
+  // overwrite an arbitrary file anywhere on the machine.
+  const reportsRoot = resolve(__dirname, 'reports');
+  const rel = relative(reportsRoot, reportPath);
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(`--report must be a file under reports/ — got "${args.report}"`);
+  }
+  if (!existsSync(reportPath)) throw new Error(`Report not found: ${args.report}`);
   const updated = upsertApplicationAnswersSection(readFileSync(reportPath, 'utf-8'), snapshot);
-  writeFileSync(reportPath, updated, 'utf-8');
+  // Atomic replace: a crash mid-write truncates the report; temp+rename keeps
+  // the previous content intact until the full new content is on disk.
+  const tmpPath = `${reportPath}.tmp-${process.pid}`;
+  writeFileSync(tmpPath, updated, 'utf-8');
+  renameSync(tmpPath, reportPath);
 
   const normalized = normalizeApplicationAnswersSnapshot(snapshot);
   console.log(JSON.stringify({ report: reportPath, date: normalized.date, state: normalized.state }, null, 2));

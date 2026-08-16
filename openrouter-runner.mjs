@@ -388,9 +388,13 @@ function assertSafeRemoteUrl(url) {
     throw new Error(`Refusing non-HTTP(S) URL: ${url}`);
   }
   const host = u.hostname.toLowerCase();
-  const blocked = host === 'localhost' || host === '::1' || host.endsWith('.local') ||
-    /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
-    /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  // WHATWG URL keeps brackets on IPv6 literal hostnames ("[::1]"), so strip
+  // them before the checks — otherwise http://[::1]:8080/ (and any expanded
+  // form like [0:0:0:0:0:0:0:1]) slips past every match below.
+  const bareHost = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  const blocked = bareHost === 'localhost' || bareHost === '::1' || bareHost === '0.0.0.0' || bareHost.endsWith('.local') ||
+    /^127\./.test(bareHost) || /^10\./.test(bareHost) || /^192\.168\./.test(bareHost) ||
+    /^169\.254\./.test(bareHost) || /^172\.(1[6-9]|2\d|3[01])\./.test(bareHost);
   if (blocked) throw new Error(`Refusing private/loopback host: ${host}`);
   return u;
 }
@@ -539,10 +543,9 @@ function addToPipeline(entries) {
 }
 
 function extractCompanySlug(text, url) {
-  // Try to extract from text (e.g. "Senior Engineer at Acme" or "Company: Acme")
-  const m = text.match(/(?:at|@|company[:\s]+)\s*([A-Z][A-Za-z0-9]{2,25})/);
-  if (m) return m[1].toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  // Fall back to URL hostname (e.g. job-boards.greenhouse.io/acme → acme)
+  // Prefer the URL hostname/path — it names the actual employer page, while
+  // prose ("located at Berlin", "based in London") can false-positive on the
+  // bare "at" pattern below.
   if (url) {
     try {
       const parts = new URL(url).pathname.split('/').filter(Boolean);
@@ -550,6 +553,11 @@ function extractCompanySlug(text, url) {
       return slug.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     } catch { /* not a valid URL */ }
   }
+  // Fall back to text — but only when the "at"/"@"/company marker is not
+  // immediately preceded by an adverb like "located"/"based"/"working" that
+  // makes it read as a geographic preposition ("located at Berlin").
+  const m = text.match(/(?<!(?:located|based|working|situated)\s+)(?:at|@|company[:\s]+)\s*([A-Z][A-Za-z0-9]{2,25})/i);
+  if (m) return m[1].toLowerCase().replace(/[^a-z0-9]+/g, '-');
   return 'company';
 }
 
@@ -576,10 +584,20 @@ async function cmdScan() {
     process.stdout.write(`  ${c.name.padEnd(25)} → `);
     try {
       assertSafeRemoteUrl(c.api);
-      const r = await fetch(c.api);
-      if (!r.ok) { console.log(`HTTP ${r.status}`); continue; }
-      const data = await r.json();
-      const jobs = data.jobs ?? [];
+      // Greenhouse boards-api caps a single listing response at 500 jobs and
+      // paginates via ?page=N — a single fetch silently truncates large boards.
+      const allJobs = [];
+      for (let page = 1; page <= 50; page++) {
+        const pageUrl = new URL(c.api);
+        pageUrl.searchParams.set('page', String(page));
+        const r = await fetch(pageUrl.toString(), { signal: AbortSignal.timeout(15_000) });
+        if (!r.ok) { console.log(`HTTP ${r.status}`); break; }
+        const data = await r.json();
+        const jobs = data.jobs ?? [];
+        allJobs.push(...jobs);
+        if (jobs.length < 500) break; // short page → done
+      }
+      const jobs = allJobs;
       const matched = jobs.filter(j => titleMatches(j.title));
       console.log(`${jobs.length} listings, ${matched.length} matched`);
       for (const j of matched) {
@@ -671,8 +689,13 @@ async function cmdEvaluate(input, ctx) {
     const legitLine  = legitMatch ? `**Legitimacy:** ${legitMatch[1].trim()}` : '**Legitimacy:** unconfirmed';
     writeFile(relPath, `**URL:** ${input || '(pasted)'}\n${legitLine}\n\n${result}`);
 
-    const scoreMatch  = result.match(/(?:score|puntuaci[oó]n)[^\d]*(\d+\.?\d*)/i);
-    const scoreValue  = scoreMatch ? parseFloat(scoreMatch[1]) : NaN;
+    // Parse SCORE strictly from the machine summary block, never the first
+    // "Score:" in the report prose (an unanchored match can pick up a Block
+    // score like "**Score:** 4.8/5" and write the wrong value to the tracker).
+    const summaryBlock = result.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
+    const scoreValue  = summaryBlock
+      ? (() => { const m = summaryBlock[1].match(/^\s*SCORE:\s*([0-9]+(?:\.[0-9]+)?)/mi); return m ? parseFloat(m[1]) : NaN; })()
+      : NaN;
     const scoreStr    = isFinite(scoreValue) ? `${scoreValue.toFixed(1)}/5` : '';
     const companyName = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const reportLink  = `[${numStr}](reports/${numStr}-${slug}-${today}.md)`;
@@ -741,7 +764,9 @@ async function cmdApply(ref, ctx) {
     const numStr = String(ref).padStart(3, '0');
     const reportsDir = path.join(__dirname, 'reports');
     const dirEntries = fs.existsSync(reportsDir) ? fs.readdirSync(reportsDir) : [];
-    const matches = dirEntries.filter(f => f.startsWith(numStr));
+    // Anchor the prefix: a bare startsWith would let report "001" match
+    // "0010-…" (report 10) and load the wrong file.
+    const matches = dirEntries.filter(f => new RegExp(`^0*${numStr}-`).test(f));
     if (matches.length === 0) {
       console.error(`Report not found: ${ref}`);
       return;

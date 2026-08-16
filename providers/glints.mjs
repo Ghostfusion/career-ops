@@ -199,7 +199,7 @@ export default {
     const keywords = entry.searchKeywords || '';
     const country = entry.countryCode || DEFAULT_COUNTRY;
     const pageSize = Number(entry.pageSize) || DEFAULT_PAGE_SIZE;
-    const maxPages = Number(entry.maxPages) || DEFAULT_MAX_PAGES;
+    const maxPages = Math.min(Number(entry.maxPages) || DEFAULT_MAX_PAGES, 100);
     const fallbackCompany = entry.name || '';
 
     const allJobs = [];

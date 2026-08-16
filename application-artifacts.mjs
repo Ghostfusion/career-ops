@@ -9,11 +9,16 @@
  */
 
 import { mkdirSync, writeFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
 import { parseArgs } from 'util';
 import { fileURLToPath } from 'url';
+import { createHash } from 'crypto';
 
-const DEFAULT_OUTPUT_ROOT = resolve('output');
+// Anchor to the script's directory, not process.cwd(): headless workers that
+// run from another directory would otherwise scatter artifact bundles outside
+// the repo (and the dashboard's regeneration path depends on stable roots).
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_OUTPUT_ROOT = resolve(__dirname, 'output');
 const DECISIONS = new Set(['reuse', 'reuse-with-edits', 'regenerate']);
 
 /** Convert a user-facing label into a safe, readable path segment. */
@@ -23,7 +28,15 @@ export function slugifySegment(value, fallback = 'application') {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return slug || fallback;
+  // Unicode/emoji-only labels collapse to '' → fallback, losing identity: two
+  // different companies both become "application" and the last writer wins.
+  // Append a short hash of the ORIGINAL value so the path stays unique (and
+  // deterministic) without needing to transliterate.
+  if (!slug) {
+    const hash = createHash('sha1').update(String(value ?? '')).digest('hex').slice(0, 6);
+    return `${fallback}-${hash}`;
+  }
+  return slug;
 }
 
 /** Return all stable paths belonging to one application artifact bundle. */

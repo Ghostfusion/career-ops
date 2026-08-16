@@ -11,6 +11,14 @@ const ALLOWED_GREENHOUSE_HOSTS = new Set([
   'job-boards.eu.greenhouse.io',
 ]);
 
+// Greenhouse's boards-api caps a single /jobs response at 500 postings and
+// paginates via ?page=N (and ?per_page). Boards with >500 open roles would
+// otherwise be silently truncated to the first page. Loop pages until a short
+// page or the cap, logging truncation like the other paginating providers.
+const DEFAULT_MAX_PAGES = 50;
+const MAX_PAGES_CAP = 500;
+const PER_PAGE = 500;
+
 /** @param {string} url */
 function assertGreenhouseUrl(url) {
   let parsed;
@@ -32,9 +40,18 @@ function resolveApiUrl(entry) {
     return entry.api;
   }
   const url = entry.careers_url || '';
-  const match = url.match(/job-boards(?:\.eu)?\.greenhouse\.io\/([^/?#]+)/);
+  // Legacy host boards.greenhouse.io/<slug> is in the allowlist, so detect it
+  // too (job-boards(.eu).greenhouse.io/<slug> has always been covered).
+  const match = url.match(/(?:job-boards(?:\.eu)?|boards)\.greenhouse\.io\/([^/?#]+)/);
   if (match) return `https://boards-api.greenhouse.io/v1/boards/${match[1]}/jobs`;
   return null;
+}
+
+/** Resolve the page cap: a positive integer `max_pages` on the entry, capped. */
+function resolveMaxPages(entry) {
+  const v = entry?.max_pages;
+  if (Number.isInteger(v) && v > 0) return Math.min(v, MAX_PAGES_CAP);
+  return DEFAULT_MAX_PAGES;
 }
 
 // NaN-safe Date.parse — `|| undefined` would also coerce a valid epoch 0.
@@ -131,10 +148,34 @@ export default {
     const apiUrl = resolveApiUrl(entry);
     if (!apiUrl) throw new Error(`greenhouse: cannot derive API URL for ${entry.name}`);
     assertGreenhouseUrl(apiUrl);
-    // redirect:'error' prevents SSRF via server-side redirects; combined with
-    // assertGreenhouseUrl above it guarantees the final hostname stays in the allowlist.
-    const json = /** @type {any} */ (await ctx.fetchJson(apiUrl, { redirect: 'error' }));
-    const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+
+    // Paginate ?page=N: the boards-api caps each response at PER_PAGE postings,
+    // so a single fetch silently truncates large boards. Stop on a short page
+    // (fewer than PER_PAGE results) or the page cap, logging truncation so the
+    // user can raise max_pages on the entry.
+    const maxPages = resolveMaxPages(entry);
+    const all = [];
+    const pageUrl = (page) => {
+      const u = new URL(apiUrl);
+      u.searchParams.set('page', String(page));
+      u.searchParams.set('per_page', String(PER_PAGE));
+      return u.toString();
+    };
+    let truncated = false;
+    for (let page = 1; page <= maxPages; page++) {
+      // redirect:'error' prevents SSRF via server-side redirects; combined with
+      // assertGreenhouseUrl above it guarantees the final hostname stays in the allowlist.
+      const json = /** @type {any} */ (await ctx.fetchJson(pageUrl(page), { redirect: 'error' }));
+      const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+      all.push(...jobs);
+      if (jobs.length < PER_PAGE) break;
+      if (page === maxPages) truncated = true;
+    }
+    if (truncated) {
+      console.error(`⚠️  greenhouse: ${entry.name} truncated at max_pages=${maxPages} (${all.length} postings collected) — raise max_pages on this entry for more`);
+    }
+
+    const jobs = all;
     const usable = jobs.filter(/** @param {any} j */ j => j.absolute_url);
 
     // Only pay for /offices when this board actually hides its cities there.

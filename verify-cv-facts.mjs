@@ -372,12 +372,16 @@ export function verifyFacts(targetText, {
   const unsupportedFacts = factClaims(targetText)
     .filter(({ value }) => !sourceContainsFact(sourceNormalized, value) && !allowedFacts.has(value))
     .filter((claim, index, claims) => claims.findIndex(other => other.kind === claim.kind && other.value === claim.value) === index);
+  // Hoisted: stripMarkup runs N full-document markup passes when called per
+  // phrase (the auditClaims path already fixed this at its call site — keep the
+  // two from drifting again).
+  const targetPlain = stripMarkup(targetText).toLowerCase();
   const forbidden = config.forbidden_phrases
       .filter(Boolean)
-      .filter(phrase => stripMarkup(targetText).toLowerCase().includes(String(phrase).toLowerCase()));
+      .filter(phrase => targetPlain.includes(String(phrase).toLowerCase()));
   const warnings = config.warn_phrases
       .filter(Boolean)
-      .filter(phrase => stripMarkup(targetText).toLowerCase().includes(String(phrase).toLowerCase()));
+      .filter(phrase => targetPlain.includes(String(phrase).toLowerCase()));
   return {
     verdict: invented.length || unsupportedFacts.length || forbidden.length ? 'block' : warnings.length ? 'warn' : 'pass',
     invented,

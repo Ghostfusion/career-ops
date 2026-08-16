@@ -12769,7 +12769,9 @@ try {
   // the per-request call must NOT re-embed the full systemPrompt inline (that
   // would defeat stable-prefix caching and duplicate the context)
   const noInlinePrefix = !/generateContent\(\[[\s\S]*?\{\s*text:\s*systemPrompt\s*\}/.test(src);
-  const carriesJdTurn = /generateContent\(`JOB DESCRIPTION TO EVALUATE/.test(src);
+  // the per-request call carries the JD only as the user turn, fenced as
+  // untrusted data (never in the scoring-rule system prompt — #2384 hygiene)
+  const carriesJdTurn = /generateContent\([^)]*'JOB DESCRIPTION TO EVALUATE/.test(src);
   if (usesSystemInstruction && noInlinePrefix && carriesJdTurn) {
     pass('gemini-eval moves the static prefix to systemInstruction and sends only the JD turn (#1709)');
   } else {

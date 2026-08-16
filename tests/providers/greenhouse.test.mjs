@@ -110,7 +110,7 @@ try {
     { fetchJson: async (url, opts) => { capturedUrl = url; capturedOpts = opts; return sample; } },
   );
 
-  if (capturedUrl === 'https://boards-api.greenhouse.io/v1/boards/acme/jobs' && capturedOpts?.redirect === 'error') {
+  if (capturedUrl === 'https://boards-api.greenhouse.io/v1/boards/acme/jobs?page=1&per_page=500' && capturedOpts?.redirect === 'error') {
     pass('greenhouse.fetch() hits the derived boards-api URL with redirect:"error" (SSRF guard)');
   } else {
     fail(`greenhouse.fetch() url=${JSON.stringify(capturedUrl)} opts=${JSON.stringify(capturedOpts)}`);
@@ -156,6 +156,45 @@ try {
     if (!Array.isArray(out) || out.length !== 0) { emptyOk = false; fail(`greenhouse.fetch() body=${JSON.stringify(body)} → ${JSON.stringify(out)}`); break; }
   }
   if (emptyOk) pass('greenhouse.fetch() returns [] for null / {} / non-array jobs response bodies');
+
+  // Pagination: the boards-api caps at PER_PAGE per response, so fetch must walk
+  // ?page=N until a short page. A feed with exactly PER_PAGE on page 1 and 1 on
+  // page 2 must return both pages; a single-page board must make one request.
+  const PER_PAGE = 500;
+  const fullPage = Array.from({ length: PER_PAGE }, (_, i) => ({ id: i + 1, title: `R${i + 1}`, absolute_url: `https://job-boards.greenhouse.io/acme/jobs/${i + 1}` }));
+  const pageRequests = [];
+  const paginated = await greenhouse.fetch(
+    { name: 'Acme', careers_url: 'https://job-boards.greenhouse.io/acme' },
+    {
+      fetchJson: async (url) => {
+        pageRequests.push(url);
+        const page = Number(new URL(url).searchParams.get('page'));
+        return page === 1 ? { jobs: fullPage } : { jobs: [{ id: 999001, title: 'Last', absolute_url: 'https://job-boards.greenhouse.io/acme/jobs/999001' }] };
+      },
+    },
+  );
+  if (pageRequests.length === 2 && paginated.length === PER_PAGE + 1 && new URL(pageRequests[1]).searchParams.get('page') === '2') {
+    pass('greenhouse.fetch() paginates across a full 500-job first page');
+  } else {
+    fail(`greenhouse.fetch() pagination: requests=${pageRequests.length}, jobs=${paginated.length} (first=${pageRequests[0]}, second=${pageRequests[1]})`);
+  }
+
+  // A short first page stops after one request (single-page board).
+  const shortRequests = [];
+  await greenhouse.fetch(
+    { name: 'Acme', careers_url: 'https://job-boards.greenhouse.io/acme' },
+    { fetchJson: async (url) => { shortRequests.push(url); return { jobs: [{ id: 1, title: 'Only', absolute_url: 'https://job-boards.greenhouse.io/acme/jobs/1' }] }; } },
+  );
+  if (shortRequests.length === 1) pass('greenhouse.fetch() stops after one request on a short board');
+  else fail(`greenhouse.fetch() short board made ${shortRequests.length} requests`);
+
+  // detect() also resolves the legacy boards.greenhouse.io host.
+  const legacyDetect = greenhouse.detect({ name: 'Legacy', careers_url: 'https://boards.greenhouse.io/legacyco' });
+  if (legacyDetect && legacyDetect.url === 'https://boards-api.greenhouse.io/v1/boards/legacyco/jobs') {
+    pass('greenhouse.detect() extracts the slug from a boards.greenhouse.io careers_url');
+  } else {
+    fail(`greenhouse.detect() boards.greenhouse.io → ${JSON.stringify(legacyDetect)}`);
+  }
 
   // Guard chain runs BEFORE any request: an untrusted api: must throw without
   // ever calling fetchJson.

@@ -201,7 +201,7 @@ function resolveNow(now) {
 
 // --- Source loaders (each returns {rows|clusters, loaded}; missing file -> empty + loaded:false) ---
 
-export function loadTrackerRows(rootDir = CAREER_OPS) {
+export function loadTrackerRows(rootDir = CAREER_OPS, companyFilter) {
   const path = resolveTrackerPath(rootDir);
   if (!existsSync(path)) return { rows: [], loaded: false };
   const content = readFileSync(path, 'utf-8');
@@ -211,6 +211,15 @@ export function loadTrackerRows(rootDir = CAREER_OPS) {
   for (const line of lines) {
     const row = parseTrackerRow(line, colmap);
     if (row) rows.push(row);
+  }
+  // A --company single-card lookup only needs this company's rows: filter early
+  // so the card join doesn't hold the whole tracker (and, for the churn axis,
+  // the full scan-history) in memory just to pick one card. normalizeCompany is
+  // the same key builder the card grouping uses, so the filter matches exactly
+  // what getCompanyCard would find.
+  if (companyFilter) {
+    const want = normalizeCompany(String(companyFilter));
+    return { rows: rows.filter((r) => normalizeCompany(String(r.company || '')) === want), loaded: true };
   }
   return { rows, loaded: true };
 }
@@ -844,7 +853,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     });
   } else {
     const run = async () => {
-      const tracker = loadTrackerRows(CAREER_OPS);
+      const tracker = loadTrackerRows(CAREER_OPS, company);
       const followups = loadFollowupRows(CAREER_OPS, followupsOverride);
       const scanHistory = loadRepostClusters(CAREER_OPS, scanHistoryOverride);
       const statusLog = await loadStatusLogSource();

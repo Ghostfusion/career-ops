@@ -175,20 +175,25 @@ function list() {
   });
 }
 
-function resolve() {
+async function resolve() {
   const n = Number(process.argv[3]);
   if (!Number.isInteger(n) || n < 1) fail('resolve needs a 1-based item number (see `list`)');
-  // Number against the pending view, so `list` then `resolve N` line up.
-  const pending = parseItems().filter((it) => !it.done);
-  const target = pending[n - 1];
-  if (!target) fail(`no pending item #${n} (${pending.length} pending)`);
   const result = oneLine(opt('result'));
-  const lines = readFileSync(PATH, 'utf8').split('\n');
-  let updated = lines[target.line].replace('[ ]', '[x]');
-  if (result && !/→ result:/.test(updated)) updated += ` → result: ${result}`;
-  lines[target.line] = updated;
-  writeFileSync(PATH, lines.join('\n'));
-  process.stdout.write(`Resolved #${n}: ${target.text}\n`);
+  // Same lock discipline as add(): resolve is a read-modify-write over the
+  // whole file, and an unlocked rewrite can silently drop an item another
+  // writer appended between our read and write.
+  await withPipelineLock(PATH, () => {
+    // Number against the pending view, so `list` then `resolve N` line up.
+    const pending = parseItems().filter((it) => !it.done);
+    const target = pending[n - 1];
+    if (!target) fail(`no pending item #${n} (${pending.length} pending)`);
+    const lines = readFileSync(PATH, 'utf8').split('\n');
+    let updated = lines[target.line].replace('[ ]', '[x]');
+    if (result && !/→ result:/.test(updated)) updated += ` → result: ${result}`;
+    lines[target.line] = updated;
+    writeFileSync(PATH, lines.join('\n'));
+    process.stdout.write(`Resolved #${n}: ${target.text}\n`);
+  }, { timeoutMs: 30_000 });
 }
 
 function fail(msg) {

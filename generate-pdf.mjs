@@ -29,7 +29,7 @@
 import { chromium } from 'playwright';
 import { resolve, dirname, relative, sep, isAbsolute } from 'path';
 import { readFile } from 'fs/promises';
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { randomUUID } from 'node:crypto';
 import { readStyleTokens, injectThemeStyle } from './theme-style.mjs';
@@ -413,11 +413,18 @@ function updatePDFManifest(reportNum, pdfPath, htmlPath, format) {
   lines.push([reportNum || '', relPDF, relHTML, format, date].join('\t'));
 
   mkdirSync(dirname(manifestPath), { recursive: true });
+  // Atomic replace: batch mode fans out one generate-pdf process per CV, and a
+  // non-atomic read-modify-write lets two concurrent writers lose each other's
+  // rows (both read the same base, both write — one row silently vanishes, and
+  // the tracker PDF flag derived from this manifest flips back to ❌). Write a
+  // temp file and rename over the target so each writer's full content wins.
+  const tmpPath = `${manifestPath}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(
-    manifestPath,
+    tmpPath,
     '# report\tpdf\thtml\tformat\tdate — written by generate-pdf.mjs, do not edit\n' +
       lines.join('\n') + '\n'
   );
+  renameSync(tmpPath, manifestPath);
   return relPDF;
 }
 
@@ -508,6 +515,22 @@ async function generatePDF() {
     if (err?.code !== 'ENOENT') throw err;
   }
   validateCvSectionOrder(html, cvMarkdown, { allowReorder });
+
+  // CVs are candidate-facing documents: run the same fact gate the cover-letter
+  // path uses BEFORE any ATS normalization or Playwright render, so a document
+  // carrying an unsupported metric/fact never becomes a PDF artifact. The gate
+  // reads cv.md + article-digest.md as its sources of truth. Dynamic import to
+  // keep the module loadable in isolation (the page-budget test sandbox copies
+  // this file without its sibling modules) — the gate itself only runs when a
+  // CV source exists.
+  if (cvMarkdown) {
+    const { assertFacts } = await import('./verify-cv-facts.mjs');
+    const factCheck = assertFacts(html, { label: 'CV' });
+    if (factCheck.verdict === 'warn') {
+      console.error('⚠️  CV fact check warning:');
+      for (const phrase of factCheck.warnings) console.error(`  - advisory phrase: ${phrase}`);
+    }
+  }
 
   // Normalize text for ATS compatibility (issue #1)
   const normalized = normalizeTextForATS(html);

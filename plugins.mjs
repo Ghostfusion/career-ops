@@ -289,7 +289,17 @@ function cmdTrust(args) {
 function cmdRemove(args) {
   const id = args[0];
   if (!id) { console.error('Usage: node plugins.mjs remove <id>'); process.exit(1); }
+  // Validate before touching the filesystem: `id` becomes a path segment below,
+  // and an unvalidated value ("..", absolute path) would let path.join escape
+  // plugins.local/ and rmSync recurse up the tree (repo deletion). findManifest
+  // only accepts discovered plugin ids, so an invalid/missing plugin fails here
+  // without deleting anything.
+  if (!findManifest(id)) { console.error(`Unknown plugin "${id}". Nothing removed.`); process.exit(1); }
   const dir = path.join(ROOT, 'plugins.local', id);
+  // Defense in depth: even with findManifest's allowlist, never delete anything
+  // outside plugins.local (covers bundled plugins, which live in plugins/, and
+  // any path-join surprise on a platform with weird path semantics).
+  if (!dir.startsWith(path.join(ROOT, 'plugins.local') + path.sep)) { console.error(`Refusing to remove "${id}": not under plugins.local.`); process.exit(1); }
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
   removeLockEntry(ROOT, id);
   try { setEnabled(id, false); } catch {}
@@ -344,6 +354,10 @@ async function cmdAdd(args) {
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
+  // Load .env before ANY command reads plugin env requirements (pluginStatus,
+  // cmdList, cmdRun). Otherwise a plugin whose keys live only in .env — the
+  // documented setup — is falsely reported "missing env" and refused.
+  await loadDotenvOnce();
   switch (cmd) {
     case undefined:
     case 'list': return cmdList();

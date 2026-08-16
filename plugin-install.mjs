@@ -91,7 +91,16 @@ export function installFromRepo(root, { url, sha }) {
   mkdirSync(path.join(root, 'plugins.local'), { recursive: true });
   cpSync(result.dir, dest, { recursive: true });
   rmSync(result.dir, { recursive: true, force: true });
-  const tree = hashPluginTree(dest);
+  let tree;
+  try {
+    tree = hashPluginTree(dest);
+  } catch (e) {
+    // hashPluginTree refuses symlinks and can throw after the copy already
+    // landed at its final location — clean up so a reinstall isn't blocked by
+    // "already exists" on a half-installed plugin.
+    rmSync(dest, { recursive: true, force: true });
+    throw e;
+  }
   return { id, manifest: { ...result.manifest, dir: dest }, integrity: tree.integrity, files: tree.files, repo: safeUrl, sha };
 }
 

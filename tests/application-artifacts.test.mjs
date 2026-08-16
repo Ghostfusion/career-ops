@@ -59,8 +59,16 @@ try {
   expectError('versions must be positive integers', () => applicationArtifactPaths({ reportNum: 7, company: 'Acme', role: 'Engineer', version: 0, root }), /version must be a positive integer/);
   expectError('reuse decisions reject unknown values', () => writeReuseDecision(paths, { decision: 'maybe' }), /decision must be one of/);
   expectError('changed sections must be an array', () => writeReuseDecision(paths, { decision: 'reuse', changedSections: 'Summary' }), /changedSections must be an array/);
-  if (slugifySegment('!!!') === 'application') console.log('  ✅ punctuation-only slugs use the application fallback');
-  else throw new Error('punctuation-only slug did not use the application fallback');
+  // Punctuation-only / unicode-only labels collapse to the fallback segment
+  // PLUS a short content hash, so two distinct companies ("!!!", "???") never
+  // collide on the same "application" path (last writer would win).
+  const puny = slugifySegment('!!!');
+  const puny2 = slugifySegment('???');
+  if (puny.startsWith('application-') && puny !== puny2 && puny.length === 'application-'.length + 6) {
+    console.log('  ✅ punctuation-only slugs use the hashed application fallback (unique per input)');
+  } else {
+    throw new Error(`punctuation-only slug fallback unexpected: "${puny}" vs "${puny2}"`);
+  }
 
   const repoPaths = applicationArtifactPaths({ reportNum: 7, company: 'Acme AI', role: 'Senior AI Engineer', version: 2, root: join(process.cwd(), 'output') });
   if (repoRelativeManifestPath(repoPaths.cv.tailored.html) === 'output/007-acme-ai-senior-ai-engineer/cv/tailored/v002/cv.html'

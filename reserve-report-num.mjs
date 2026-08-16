@@ -21,7 +21,7 @@ import {
   statSync, unlinkSync, writeFileSync,
 } from 'fs';
 import { randomUUID } from 'crypto';
-import { dirname, join, resolve } from 'path';
+import { dirname, join, resolve, basename } from 'path';
 import { fileURLToPath } from 'url';
 import {
   extractTrackerReportNumbers, parseTrackerRow, resolveColumns,
@@ -140,6 +140,22 @@ function releaseSlot(reportsDir, num, { token, force = false } = {}) {
   const sentinel = sentinelPath(reportsDir, num);
   try {
     if (!force && readSentinelOwner(sentinel)?.token !== token) return false;
+    // Guard against releasing a number that now owns a REAL report file
+    // (e.g. an administrative `--release` racing a worker that already wrote
+    // reports/042-acme-2026-08-15.md). Unlinking the sentinel would let the
+    // next reservation reuse 042 and collide with the existing report. The
+    // sentinel itself (`NNN-RESERVED.md`) matches the prefix pattern, so it is
+    // excluded explicitly — only a non-sentinel file with the number prefix
+    // (a real report) triggers the guard.
+    const reportPattern = new RegExp(`^${formatReportNumber(num)}-`);
+    const sentinelName = basename(sentinel);
+    for (const name of readdirSync(reportsDir)) {
+      if (reportPattern.test(name) && name !== sentinelName) {
+        if (!force) return false;
+        console.error(`⚠️  Refusing to release #${num}: a real report (${name}) exists for it.`);
+        return false;
+      }
+    }
     unlinkSync(sentinel);
     return true;
   } catch (err) {

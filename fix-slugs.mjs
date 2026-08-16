@@ -29,7 +29,7 @@
  *   node fix-slugs.mjs --file <path> # use a specific portals file
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 
@@ -338,7 +338,9 @@ async function main() {
   printDiff(fixes, { dryRun });
 
   if (!dryRun && fixes.length > 0) {
-    writeFileSync(filePath, text, 'utf-8');
+    const tmpPath = `${filePath}.tmp-${process.pid}`;
+    writeFileSync(tmpPath, text, 'utf-8');
+    renameSync(tmpPath, filePath);
     console.log(`\nportals.yml updated (${fixes.length} fixed).`);
   } else if (dryRun && fixes.length > 0) {
     console.log('\nRun with --fix to write these changes to portals.yml.');

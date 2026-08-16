@@ -2593,9 +2593,15 @@ async function main() {
         provider = fallback.provider;
         sourceName = `${provider.id}-api`;
         jobs = await provider.fetch(company, ctx);
+        // A successful API fallback is a RECOVERY, not a failure: record it
+        // under its own kind so it never feeds the portal-health failure
+        // streak (a company whose parser broke but whose API fallback works
+        // every run would otherwise accumulate auth/server/unknown streaks and
+        // trigger the 🚨 escalation while scanning perfectly).
         errors.push({
           company: company.name,
           error: `local parser failed, used API fallback: ${parserErr.message}`,
+          kind: 'recovered',
         });
       }
       if (!Array.isArray(jobs)) {
@@ -2898,7 +2904,8 @@ async function main() {
 
   const unreachableTargets = errors.filter((e) => e.kind === 'slug_gone');
   const networkTargets = errors.filter((e) => e.kind === 'network');
-  const otherErrors = errors.filter((e) => e.kind !== 'slug_gone' && e.kind !== 'network');
+  const recoveredTargets = errors.filter((e) => e.kind === 'recovered');
+  const otherErrors = errors.filter((e) => e.kind !== 'slug_gone' && e.kind !== 'network' && e.kind !== 'recovered');
   
   const STREAK_THRESHOLD = config.portal_health_threshold || 3;
   const nowStr = new Date().toISOString();
@@ -2933,7 +2940,9 @@ async function main() {
   // included — a WAF that 403s the scanner every run is coverage decay too).
   // Below threshold, only slug_gone/network keep their dedicated warnings;
   // auth/server/unknown stay in the one-off `Errors (N):` print below.
-  for (const e of [...unreachableTargets, ...networkTargets, ...otherErrors.filter((x) => x.kind)]) {
+  // `recovered` entries (successful parser→API fallbacks) are never failures —
+  // they get their own summary line instead.
+  for (const e of [...unreachableTargets, ...networkTargets, ...otherErrors.filter((x) => x.kind && x.kind !== 'recovered')]) {
     const streak = currentStreaks.get(e.company) || 1;
     if (streak >= STREAK_THRESHOLD) {
       if (!persistentlyDead.includes(e.company)) persistentlyDead.push(e.company);
@@ -2966,6 +2975,12 @@ async function main() {
     console.log(`\nErrors (${otherErrors.length}):`);
     for (const e of otherErrors) {
       console.log(`  ✗ ${e.company}: ${e.error}`);
+    }
+  }
+  if (recoveredTargets.length > 0) {
+    console.log(`\n🟡 Recovered (${recoveredTargets.length}): local parser failed, API fallback succeeded`);
+    for (const e of recoveredTargets) {
+      console.log(`  ↻ ${e.company}: ${e.error}`);
     }
   }
 

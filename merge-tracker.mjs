@@ -69,8 +69,7 @@ function loadFailedReportNumbers(path) {
   }
   return failed;
 }
-const FAILED_REPORT_NUMBERS = loadFailedReportNumbers(BATCH_STATE_FILE);
-const DRY_RUN = process.argv.includes('--dry-run');
+const FAILED_REPORT_NUMBERS = loadFailedReportNumbers(BATCH_STATE_FILE);const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
 const MIGRATE = process.argv.includes('--migrate');
 const MIGRATE_VIA = process.argv.includes('--migrate-via');
@@ -902,7 +901,7 @@ for (const file of tsvFiles) {
   // 2. Company + role fuzzy match
   const reportNum = extractReportNum(addition.report);
 
-  if (reportNum && FAILED_REPORT_NUMBERS.has(reportNum)) {
+  if (reportNum && loadFailedReportNumbers(BATCH_STATE_FILE).has(reportNum)) {
     console.warn(`⚠️  Skipping ${file}: report #${reportNum} is marked "failed" in batch-state.tsv — refusing to merge a tracker line for an offer the batch runner itself recorded as failed (possible fabricated result)`);
     skipped++;
     continue;

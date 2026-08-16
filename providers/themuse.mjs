@@ -8,6 +8,8 @@
 //
 // Wire in via a `job_boards:` entry with `provider: themuse`.
 
+import { fetchJsonWithRetry } from './_http.mjs';
+
 const FEED_BASE = 'https://www.themuse.com/api/public/jobs';
 const TRUSTED_HOST = 'www.themuse.com';
 
@@ -17,13 +19,12 @@ const TRUSTED_HOST = 'www.themuse.com';
 const MAX_PAGES = 100;
 
 // Retry policy for transient page failures (429 rate-limit, 5xx,
-// timeouts/aborts). Without retry, one stalled request out of up to 100
-// sequential page fetches throws and discards every job already gathered
-// from this board for the run -- the whole board reads as "not working" when
-// only one page had a bad moment. Mirrors workday.mjs / oraclecloud.mjs.
-const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 500;
-const RETRY_MAX_DELAY_MS = 8_000;
+// timeouts/aborts) — the shared _http.mjs fetchJsonWithRetry provides the
+// backoff, Retry-After handling, non-retryable (incl. refused-redirect)
+// classification and `.attempts` reporting. The policy mirrors the local
+// policy this provider used to carry: 3 retries (4 attempts), 500ms base,
+// 8s cap.
+const RETRY_POLICY = { retries: 3, baseDelayMs: 500, maxDelayMs: 8_000 };
 
 // Delay between successive pages so a 100-page walk doesn't fire as a burst
 // against the same host (mirrors workday.mjs / oraclecloud.mjs).
@@ -32,51 +33,6 @@ const INTER_PAGE_DELAY_MS = 150;
 function sleep(ms, ctx) {
   if (typeof ctx?.sleep === 'function') return ctx.sleep(ms);
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Parses a `Retry-After` header value (seconds, or an HTTP-date) to ms, or null. */
-function parseRetryAfterMs(value) {
-  if (!value) return null;
-  const secs = Number(value);
-  if (Number.isFinite(secs) && secs >= 0) return secs * 1000;
-  const dateMs = Date.parse(value);
-  return Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : null;
-}
-
-function isRetryableError(err) {
-  const status = err?.status;
-  if (status === 429) return true;
-  if (typeof status === 'number' && status >= 500) return true;
-  return status === undefined; // network error / timeout / abort — no status set
-}
-
-/**
- * Fetches a single page, retrying transient failures with backoff. The
- * thrown error (whether retries were exhausted or the error was
- * non-retryable) carries `attempts` — the actual number of fetchJson calls
- * made — so a caller reporting failure doesn't have to assume the fixed
- * MAX_RETRIES+1 ceiling, which would misreport a non-retryable error (one
- * attempt, no retries) as having exhausted the full retry budget.
- */
-async function fetchPageWithRetry(ctx, url, opts) {
-  let lastErr;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      return await ctx.fetchJson(url, opts);
-    } catch (err) {
-      lastErr = err;
-      lastErr.attempts = attempt + 1;
-      if (attempt === MAX_RETRIES || !isRetryableError(err)) throw lastErr;
-      const backoff = Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS);
-      // A server-supplied Retry-After is honored, but still clamped — an
-      // unbounded value would otherwise stall this board's fetch for as long
-      // as the server says, defeating the point of a bounded backoff.
-      const retryAfterMs = parseRetryAfterMs(err?.retryAfter);
-      const delayMs = retryAfterMs !== null ? Math.min(retryAfterMs, RETRY_MAX_DELAY_MS * 4) : (backoff + Math.random() * 250);
-      await sleep(delayMs, ctx);
-    }
-  }
-  throw lastErr;
 }
 
 /** @param {string} url */
@@ -142,7 +98,7 @@ export default {
     // retry-tolerant loop (`page = 1` start) for the same reason.
     const firstUrl = `${FEED_BASE}?page=0`;
     // redirect:'error' prevents SSRF via server-side redirects
-    const first = await fetchPageWithRetry(ctx, firstUrl, { redirect: 'error' });
+    const first = await fetchJsonWithRetry(ctx, firstUrl, { redirect: 'error' }, RETRY_POLICY);
     if (!first || !Array.isArray(first.results)) {
       throw new Error(
         `themuse: unexpected API response on page 0 — expected { results: [...] }, got keys: [${first ? Object.keys(first).join(', ') : 'null'}]`,
@@ -163,7 +119,7 @@ export default {
       const url = `${FEED_BASE}?page=${page}`;
       let json;
       try {
-        json = await fetchPageWithRetry(ctx, url, { redirect: 'error' });
+        json = await fetchJsonWithRetry(ctx, url, { redirect: 'error' }, RETRY_POLICY);
         if (!json || !Array.isArray(json.results)) {
           throw new Error(
             `themuse: unexpected API response on page ${page} — expected { results: [...] }, got keys: [${json ? Object.keys(json).join(', ') : 'null'}]`,

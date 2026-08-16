@@ -89,6 +89,11 @@
     "url": "https://github.com/santifer/career-ops"
   },
   "license": "MIT",
+  "allowScripts": {
+    "playwright": true,
+    "playwright-core": true,
+    "esbuild": true
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^17.0.0",

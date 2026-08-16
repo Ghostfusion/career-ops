@@ -86,6 +86,14 @@ try {
 
 const lines = content.split('\n');
 const colmap = resolveColumns(lines);
+// Fail fast when the tracker has no PDF column: writing parts[undefined] = '✅'
+// is a non-index property that rebuildRow drops, so the row is unchanged while
+// the script would still print "updated" and exit 0 — silent false success.
+if (colmap.pdf == null) {
+  if (flags.json) console.error(JSON.stringify({ error: 'tracker has no PDF column', code: 'no-pdf-column' }));
+  else console.error('❌ Tracker has no PDF column — nothing to sync (add a | PDF | column to the header).');
+  process.exit(2);
+}
 
 let updated = 0;
 let unchanged = 0;

@@ -33,6 +33,16 @@ for (const arg of args) {
   }
 }
 
+// Validate --min-score: NaN silently disabled the filter (every row fails
+// `score >= NaN`, so nothing was ever tailored) while the script reported
+// "No completed roles found". Clamp to 0..5 so a stray value can't produce
+// either silent behavior.
+if (!Number.isFinite(minScore)) {
+  console.error(`ERROR: Invalid --min-score="${args.find((a) => a.startsWith('--min-score='))?.split('=')[1]}". Use a number between 0 and 5, e.g. --min-score=4.0`);
+  process.exit(1);
+}
+minScore = Math.min(5, Math.max(0, minScore));
+
 if (!existsSync(batchStateFile)) {
   console.error(`ERROR: Batch state file not found at ${batchStateFile}`);
   process.exit(1);
@@ -83,7 +93,7 @@ for (let i = 0; i < toProcess.length; i++) {
     '-p',
     '--dangerously-skip-permissions',
     '--append-system-prompt-file',
-    'modes/pdf.md',
+    join(__dirname, 'modes', 'pdf.md'),
     prompt
   ];
   

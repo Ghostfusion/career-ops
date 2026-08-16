@@ -381,6 +381,79 @@ Features: 6 filter tabs, 4 sort modes, grouped/flat view, lazy-loaded previews, 
 
 There is also an **experimental web UI** (alpha, opt-in — nothing runs unless you start it): see [`web/README.md`](web/README.md).
 
+## Recent Improvements
+
+A full codebase audit (105 scripts, 81 provider modules) produced fixes across
+safety, correctness, and performance. All changes ship with the 3931-test suite
+green.
+
+### Security & safety
+- **`plugins.mjs remove`** — validates the plugin id before touching the
+  filesystem; `node plugins.mjs remove ..` can no longer delete the repo.
+- **SSRF hardening** (`openrouter-runner.mjs`) — IPv6-literal hosts
+  (`http://[::1]:8080/`) and `0.0.0.0` are now rejected by the private-host
+  guard.
+- **Plugin env ordering** (`plugins.mjs`) — `.env` is loaded before the
+  "missing env" gate, so plugins configured via `.env` are no longer falsely
+  refused.
+- **`application-answers.mjs --report`** — contained to `reports/`; a crafted
+  argument can no longer read+overwrite an arbitrary file.
+- **`openai-tailor.mjs`** — LLM output is sanitized (script/iframe/event
+  handlers stripped) before being written as a CV HTML file.
+
+### Correctness
+- **Score extraction** (`openrouter-runner.mjs`) — the tracker score now comes
+  from the `---SCORE_SUMMARY---` machine block, not the first "Score:" in prose.
+- **`gemini-eval.mjs`** — `generateContent` is raced against a timeout
+  (`GEMINI_TIMEOUT_MS`, default 5 min) so a hung API call can't block forever.
+- **Eval backends** — bounded retry with backoff on 429/5xx; the JD is sent
+  once in the user turn (fenced as untrusted data) instead of twice (halved
+  input tokens, no untrusted content in the scoring-rule system prompt).
+- **Fact gate** (`generate-pdf.mjs`) — the CV PDF path now runs the same
+  `verify-cv-facts` gate as cover letters before rendering.
+- **`scan.mjs`** — a successful local-parser→API fallback is recorded as
+  `recovered`, not an error, so healthy companies can't accumulate phantom
+  failure streaks.
+- **`tracker.mjs`** — `PRAGMA defer_foreign_keys` moved before `BEGIN` (was a
+  version-dependent FK crash on the second sync).
+- **`sync-pdf-flags.mjs`** — fails fast when the tracker has no PDF column
+  instead of reporting a false success.
+- **`reserve-report-num.mjs`** — refuses to release a number that now owns a
+  real report file (closes a force-`--release` collision window).
+- **`agent-inbox.mjs`** — `resolve` runs under the same pipeline lock as `add`,
+  so a concurrent append can't be silently lost.
+
+### Provider coverage & reliability
+- **Greenhouse** — boards-api pagination (`?page=N`, 500/page, capped) so
+  boards with >500 open roles no longer silently truncate; detect() also
+  resolves the legacy `boards.greenhouse.io` host.
+- **Jobstreet/SEEK** — posting URLs use the correct per-market path (`/job/`
+  outside Indonesia) instead of the hardcoded `/id/job/` that 404'd for
+  SG/MY/AU/NZ.
+- **Arbeitsagentur** — the primary keyword pass paginates past the 100-result
+  ceiling (`arbeitsagentur.maxPages`, default 1 preserves behavior).
+- **nofluffjobs / justjoin / glints / jobstreet** — `max_pages` is clamped so a
+  stray config value can't drive thousands of requests against a third party.
+- **The Muse** — now uses the shared `_http.mjs` retry helper (and correctly
+  treats refused redirects as non-retryable).
+- **verify-portals `--add`** — probes Lever EU variants, so EU-only tenants are
+  discoverable.
+
+### Performance & atomicity
+- **Atomic writes** — `pdf-index.tsv` (generate-pdf), `fix-slugs` portals.yml,
+  and `application-answers` report writes use temp-file + rename, so a crash or
+  concurrent batch worker can no longer lose rows or truncate a file.
+- **`company-funded.mjs`** — the RSS/HN discovery fetches now run concurrently
+  instead of ~2 minutes of serial network time; total source failure exits
+  non-zero so CI callers can't mistake an empty artifact for a clean result.
+- **`company-history.mjs --company`** — filters tracker rows early for
+  single-card lookups.
+- **`verify-cv-facts.mjs`** — the phrase filters hoist one markup-strip pass
+  instead of N full-document passes.
+- **`application-artifacts.mjs`** — output root anchored to the script
+  directory (not cwd); unicode/emoji-only company names get a hashed slug
+  instead of colliding on "application".
+
 ## Project Structure
 
 ```

@@ -304,8 +304,12 @@ function syncIndex(db, states) {
   const { apps, diag } = parseTracker(states);
   const today = new Date().toISOString().slice(0, 10);
 
-  db.exec('BEGIN');
+  // defer_foreign_keys must be set BEFORE BEGIN — SQLite only honors it when
+  // the transaction starts with it enabled; setting it mid-transaction is a
+  // documented no-op that would make the DELETE below throw FOREIGN KEY
+  // constraint failed on the second sync (once status_events references rows).
   db.exec('PRAGMA defer_foreign_keys = ON'); // full rebuild — FKs settle at commit
+  db.exec('BEGIN');
   try {
     db.exec('DELETE FROM applications');
     const insertApp = db.prepare('INSERT INTO applications (id, pos, date, company, role, score, status, pdf, report, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
