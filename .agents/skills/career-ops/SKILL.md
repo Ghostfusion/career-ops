@@ -8,7 +8,7 @@ description: >-
 arguments: mode
 user_invocable: true
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | batch | tracker | agent-inbox | pipeline | contacto | training | project | interview-prep | interview | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | offer-prep | titles | upskill | followup | launchpad | applied | story-bank-seed | apply-queue | warmup | reply-watch | outcome | update]"
+argument-hint: "[scan | discover | deep | pdf | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | batch | tracker | agent-inbox | pipeline | contacto | training | project | interview-prep | interview | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | offer-prep | titles | upskill | followup | launchpad | applied | story-bank-seed | apply-queue | warmup | screen-check | expected-value | concentration | archetype-cv | reply-watch | outcome | update]"
 license: MIT
 ---
 
@@ -82,6 +82,9 @@ Determine the mode from `$mode`:
 | `story-bank-seed` | `story-bank-seed` |
 | `apply-queue` | `apply-queue` |
 | `warmup` | `warmup` |
+| `screen-check` | `screen-check` |
+| `expected-value` | `expected-value` |
+| `concentration` | `concentration` |
 | `update` | `update` |
 | `cover` | `cover` |
 
@@ -165,6 +168,9 @@ Available commands:
   /career-ops warmup   → Operating-rhythm digest (health + tiers + deadlines)
   /career-ops story-bank-seed → Build interview-prep/story-bank.md from evaluations
   /career-ops apply-queue     → Caretaker over the launchpad ACTIVE rows → submission
+  /career-ops screen-check    → Would you clear the ATS screen per open row
+  /career-ops expected-value  → Which prep is worth the hour (EV rank)
+  /career-ops concentration   → Single-employer concentration risk
   /career-ops outcome   → Record application outcome & archive artifacts
   /career-ops update    → Update career-ops system files with diff preview + compat check
 
@@ -190,7 +196,7 @@ Applies to: `auto-pipeline`, `oferta`, `ofertas`, `pdf`, `contacto`, `apply`, `p
 
 Read `modes/_profile.md` (if exists) + `modes/_custom.md` (if exists) + `modes/{mode}.md`
 
-Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `launchpad`, `applied`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `add`, `offer-prep`, `discover`
+Applies to: `tracker`, `agent-inbox`, `deep`, `interview-prep`, `interview`, `regional/eu-swe`, `interview/plan`, `interview/practice`, `interview/debrief`, `latex`, `latex-tex`, `training`, `project`, `patterns`, `titles`, `upskill`, `launchpad`, `applied`, `story-bank-seed`, `apply-queue`, `warmup`, `screen-check`, `expected-value`, `concentration`, `archetype-cv`, `followup`, `reply-watch`, `outcome`, `cover`, `email`, `add`, `offer-prep`, `discover`
 
 ### Modes delegated to subagent
 

@@ -39,6 +39,11 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `proof-portfolio.mjs` | `proof-portfolio` | Case-study README for a published proof |
 | `negotiate.mjs` | `negotiate` | One-screen negotiation brief |
 | `rejection-reset.mjs` | `rejection-reset` | After a rejection, re-list close-loop + launchpad state |
+| `screen-check.mjs` | `screen-check` | Estimated ATS-screen pass/marginal/fail per open row |
+| `archetype-cv.mjs` | `archetype-cv` | Sample tailored CV per target archetype |
+| `strengths-audit.mjs` | `strengths-audit` | CV strength / drift audit |
+| `concentration.mjs` | `concentration` | Single-employer concentration risk |
+| `expected-value.mjs` | `expected-value` | Rank prep by expected value |
 | `applied.md` | `applied` | Companion applied-search toolkit: proof-point-bank, watch-deadlines, close-loop, ingest-linkedin, salary-trend |
 | `reply-watch.md` | `reply-watch` | Classify employer replies, reconcile tracker |
 | `outcome.md` | `outcome` | Record application outcome & archive artifacts |

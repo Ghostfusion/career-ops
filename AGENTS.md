@@ -138,11 +138,16 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `ingest-linkedin.mjs` | Parses LinkedIn job-alert text into pending `- [ ] {url}` pipeline rows, deduped by URL (JSON) |
 | `salary-trend.mjs` | Folds report `advertised_comp` into role-family advertised-band spans + median vs profile target (JSON or `--summary`) |
 | `story-bank-seed.mjs` | Sweeps every report's Block F interview Plan STAR+R table into `interview-prep/story-bank.md` (deduped by title, recurrence-counted) — feeds the interviewers that read the bank (JSON or `--preview`) |
-| `apply-queue.mjs` | The on layer over launchpad: surfaces ACTIVE rows, chains cover→email→apply (draft-only), and records a done apply via `--complete` (marks Applied + seeds follow-up) never auto-applies |
+| `apply-queue.mjs` | Caretaker over launchpad ACTIVE rows — surfaces the cover→email→apply chain (draft-only); `--complete` records an apply only after you actually submit (marks Applied + seeds follow-up). Never auto-applies |
 | `warmup.mjs` | Session-start operating-rhythm digest: health + launchpad tiers + deadlines + proof-points + salary-fit in one read-only screen |
 | `proof-portfolio.mjs` | Drafts hiring-ready case-study READMEs for published proof-points, sourced only from your own files (no fabrication) |
 | `negotiate.mjs` | One-screen negotiation brief: market band (salary-trend) + verified story-bank ROIs (negotiation-roi) + comp gap for a tracker row |
-| `rejection-reset.mjs` | After a rejection, re-surfaces the row's launchpad state + the close the CV/prep edit so counselors run continues (advisory only) |
+| `rejection-reset.mjs` | After a rejection, re-surfaces close-loop's CV/prep edit + the row's launchpad state so the toolkit self-renews (advisory only) |
+| `screen-check.mjs` | Estimates resume-screen outcome (pass / marginal / fail) per open row from report hard_stops + soft gaps — the ATS bar before score matters (JSON or `--row`) |
+| `archetype-cv.mjs` | Shows a sample tailored CV per your profile archetypes (headline + summary lead + skills-first), drawn only from your own files |
+| `strengths-audit.mjs` | Is your CV getting stronger? Proof-points, sections, length, and a verify-cv-facts cleanliness check |
+| `concentration.mjs` | Portfolio concentration: share of your open pipeline per employer (warn at ≥40% single-company exposure) |
+| `expected-value.mjs` | Ranks open rows by EV = P(clear) × score × comp, so you do the highest-value prep first |
 | `reports/` | Evaluation reports `{###}-{company-slug}-{YYYY-MM-DD}.md` — Blocks A-F + G (Posting Legitimacy) + Risk Summary + `## Machine Summary` YAML; header includes `**Legitimacy:** {tier}` |
 
 ### Plugins (optional)
@@ -342,7 +347,11 @@ Two separate axes:
 | Wants a hiring-ready case-study draft for a published proof | `proof-portfolio` — drafts a README-style one-pager from your own files (`proof-portfolio.mjs`) |
 | Wants a negotiation briefing for a specific offer | `negotiate` — market band + verified ROIs + comp gap (`negotiate.mjs`) |
 | Wants to re-file a rejection into the CV/prep loop | `rejection-reset` — surfaces the row's close-loop edit and launchpad state after reject (`rejection-reset.mjs`) |
-| Wants to check target comp is realistically on offer | `salary-trend` — advertised-band span by role family vs profile target (`salary-trend.mjs`) |
+| Wants to know if an open row would even clear the ATS screen | `screen-check` — pass / marginal / fail from report hard_stops + soft gaps (`screen-check.mjs`) |
+| Wants a sample tailored CV for each target archetype | `archetype-cv` — headline + summary lead + skills-first, from your own files (`archetype-cv.mjs`) |
+| Wants to check the CV is getting stronger (not drifting) | `strengths-audit` — proofs, sections, length, fact-check (`strengths-audit.mjs`) |
+| Wants to see single-employer concentration risk | `concentration` — share of your open pipeline per employer (`concentration.mjs`) |
+| Wants to decide which prep is worth the hour | `expected-value` — rank open rows by EV = P(clear) × score × comp (`expected-value.mjs`) |
 | Wants to classify application replies and review updates | `reply-watch` — classifies replies, matches to applications, suggests tracker updates |
 | Wants to record application outcome & archive artifacts | `outcome` |
 | Wants to update the system | `update` |
