@@ -28,7 +28,7 @@ const RETRY_POLICY = { retries: 3, baseDelayMs: 500, maxDelayMs: 8_000 };
 
 // Delay between successive pages so a 100-page walk doesn't fire as a burst
 // against the same host (mirrors workday.mjs / oraclecloud.mjs).
-const INTER_PAGE_DELAY_MS = 150;
+const INTER_PAGE_DELAY_MS = 250;
 
 function sleep(ms, ctx) {
   if (typeof ctx?.sleep === 'function') return ctx.sleep(ms);
