@@ -32,6 +32,7 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `interview-redflag.md` | `interview-redflag` | Company red-flag detector |
 | `offer-prep.md` | `offer-prep` | Contract reading companion (offer stage) |
 | `followup.md` | `followup` | Follow-up cadence tracker |
+| `launchpad.md` | `launchpad` | Turn evaluated rows into an action queue (ACT / PREP / HOLD / SKIP) |
 | `reply-watch.md` | `reply-watch` | Classify employer replies, reconcile tracker |
 | `outcome.md` | `outcome` | Record application outcome & archive artifacts |
 | `tracker.md` | `tracker` | Applications tracker overview |

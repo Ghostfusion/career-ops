@@ -46,6 +46,7 @@
     "find": "node find.mjs",
     "patterns": "node analyze-patterns.mjs",
     "upskill": "node upskill.mjs",
+    "launchpad": "node launchpad.mjs",
     "add": "node add-entry.mjs",
     "reposts": "node detect-reposts.mjs",
     "digest": "node weekly-digest.mjs",
