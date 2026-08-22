@@ -132,6 +132,11 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `jd-capture.mjs` | Resolves an archived JD in `jds/` by report number, matching padded and unpadded prefixes (`064-`, `64-`, `01-`). Consumed by `outcome.mjs`; written by `archive-posting.mjs --report=N`. Replaces rebuilding a capture's filename from today's date, which stopped resolving the next day |
 | `weekly-digest.mjs` | Rolls up `interview-prep/sessions/*.md` (default: current ISO week) into a per-company round summary, recurring competency-tag counts, and best-effort recurring 🔴 gaps from `question-bank.md` (JSON or `--summary`) |
 | `launchpad.mjs` | Zero-LLM action router over evaluated tracker rows — reads each row's report YAML, assigns ACT/PREP/HOLD/SKIP tiers, names the blocking gap, chains cover→email→apply. Never writes the tracker; dismiss/re-store via `data/launchpad-state.json` (JSON or `--summary`) |
+| `proof-point-bank.mjs` | Track unpublished→published project artifacts as assets (`data/proof-points.tsv`) and report which launchpad rows (score ≥3.5) each published proof unblocks (JSON or `--summary`) |
+| `watch-deadlines.mjs` | Deadline-native watcher — flags reply-by/offer-expiry/interview-window dates from tracker notes + follow-ups within a lookahead window (JSON or `--summary`) |
+| `close-loop.mjs` | Turns a rejected row's report gaps into a proposed CV/_profile.md/launchpad-prep edit — confirm-before-write (JSON or `--summary`) |
+| `ingest-linkedin.mjs` | Parses LinkedIn job-alert text into pending `- [ ] {url}` pipeline rows, deduped by URL (JSON) |
+| `salary-trend.mjs` | Folds report `advertised_comp` into role-family advertised-band spans + median vs profile target (JSON or `--summary`) |
 | `reports/` | Evaluation reports `{###}-{company-slug}-{YYYY-MM-DD}.md` — Blocks A-F + G (Posting Legitimacy) + Risk Summary + `## Machine Summary` YAML; header includes `**Legitimacy:** {tier}` |
 
 ### Plugins (optional)
@@ -319,8 +324,13 @@ Two separate axes:
 | Asks what skills to learn, wants a skill-gap analysis of their pipeline | `upskill` |
 | Wants to build or enrich the profile from documents they already have (master CV, LinkedIn export, diplomas, references) | `intake` — scans `documents/`, extracts text locally (`intake.mjs`), proposes source-annotated additions to `config/profile.yml`/`cv.md`/`modes/_profile.md`; writes nothing without explicit confirm |
 | Asks about follow-ups or application cadence | `followup` |
-| Wants to turn evaluated rows into an action queue ("what should I actually apply to?") | `launchpad` — tiers evaluated rows ACT/PREP/HOLD/SKIP via `launchpad.mjs` (reads tracker + report YAML, never writes the tracker); chains cover→email→apply
- | Wants to classify application replies and review updates | `reply-watch` — classifies replies, matches to applications, suggests tracker updates |
+| Wants to turn evaluated rows into an action queue ("what should I actually apply to?") | `launchpad` — tiers evaluated rows ACT/PREP/HOLD/SKIP via `launchpad.mjs` (reads tracker + report YAML, never writes the tracker); chains cover→email→apply |
+| Wants to publish the artifacts that unblock their evaluations | `proof-point-bank` — track unpublished→published projects as assets that clear launchpad blockers (`proof-point-bank.mjs`) |
+| Wants to avoid missing a reply-by / offer / interview deadline | `watch-deadlines` — flag upcoming deadlines from tracker notes + follow-ups (`watch-deadlines.mjs`) |
+| Wants to learn from a rejection so the profile improves | `close-loop` — propose a concrete CV/portfolio/prep edit from a rejected row's gaps (`close-loop.mjs`) |
+| Wants to import LinkedIn job alerts into the pipeline | `ingest-linkedin` — parse alert text into pending `- [ ] {url}` rows, deduped (`ingest-linkedin.mjs`) |
+| Wants to check target comp is realistically on offer | `salary-trend` — advertised-band span by role family vs profile target (`salary-trend.mjs`) |
+| Wants to classify application replies and review updates | `reply-watch` — classifies replies, matches to applications, suggests tracker updates |
 | Wants to record application outcome & archive artifacts | `outcome` |
 | Wants to update the system | `update` |
 | Wants to queue a request for later / check the inbox between sessions | `agent-inbox` — append-only checklist drained next session; nothing auto-submits |

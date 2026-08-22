@@ -33,6 +33,7 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `offer-prep.md` | `offer-prep` | Contract reading companion (offer stage) |
 | `followup.md` | `followup` | Follow-up cadence tracker |
 | `launchpad.md` | `launchpad` | Turn evaluated rows into an action queue (ACT / PREP / HOLD / SKIP) |
+| `applied.md` | `applied` | Companion applied-search toolkit: proof-point-bank, watch-deadlines, close-loop, ingest-linkedin, salary-trend |
 | `reply-watch.md` | `reply-watch` | Classify employer replies, reconcile tracker |
 | `outcome.md` | `outcome` | Record application outcome & archive artifacts |
 | `tracker.md` | `tracker` | Applications tracker overview |
