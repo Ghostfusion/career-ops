@@ -52,6 +52,23 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run prepare:application` | `prepare-application.mjs` | Print an ATS prefill summary (read-only, never POSTs) |
 | `npm run build:dashboard` | `build-dashboard.mjs` | Build the Go TUI dashboard binary cross-platform |
 | `node upgrade-tests.mjs --pr-gate` | `upgrade-tests.mjs` | Upgrade an install seeded from the newest old release to this commit and prove user data survived (CI gate; `--canary` proves the gate can fail) |
+| `npm run launchpad` | `launchpad.mjs` | Tier evaluated tracker rows ACT/PREP/HOLD/SKIP so you act on what matters (zero-LLM) |
+| `npm run proof-points` | `proof-point-bank.mjs` | Track unpublished→published project artifacts; show which open rows they unblock |
+| `npm run watch-deadlines` | `watch-deadlines.mjs` | Flag reply-by/offer-expiry/interview-window dates within a lookahead |
+| `npm run close-loop` | `close-loop.mjs` | Turn a rejection's gaps into a concrete CV/portfolio/prep edit (confirm-before-write) |
+| `npm run ingest-linkedin` | `ingest-linkedin.mjs` | Parse LinkedIn job-alert text into deduped pending pipeline rows |
+| `npm run salary-trend` | `salary-trend.mjs` | Advertised-comp band span by role family vs profile target |
+| `npm run story:bank` | `story-bank-seed.mjs` | Sweep every report's Block F into interview-prep/story-bank.md |
+| `npm run apply:queue` | `apply-queue.mjs` | Caretaker over launchpad ACTIVE rows — cover→email→apply chain, --complete records a done apply |
+| `npm run warmup` | `warmup.mjs` | Session-start operating-rhythm digest (health + tiers + deadlines + proofs + comp) |
+| `npm run portfolio` | `proof-portfolio.mjs` | Draft a case-study README for a published proof-point |
+| `npm run negotiate` | `negotiate.mjs` | One-screen negotiation brief (market band + verified ROIs + comp gap) |
+| `npm run rejection-reset` | `rejection-reset.mjs` | Re-surface close-loop edit + launchpad state after a rejection |
+| `npm run screen-check` | `screen-check.mjs` | Estimated ATS resume-screen outcome (pass/marginal/fail) per open row |
+| `npm run archetype-cv` | `archetype-cv.mjs` | Sample tailored CV per target archetype, from your own files |
+| `npm run strengths-audit` | `strengths-audit.mjs` | Is your CV getting stronger? (proofs, sections, length, fact-check) |
+| `npm run concentration` | `concentration.mjs` | Single-employer share of your open pipeline (warns ≥40%) |
+| `npm run expected-value` | `expected-value.mjs` | Rank open rows by EV = P(clear) × score × comp |
 
 ---
 
@@ -1103,3 +1120,284 @@ Runs:       — no data (data/scan-runs.tsv missing; created by the next scan)
 * `filtered_blacklist` — skipped because the company is on your `data/blacklist.md` do-not-apply list (#1742)
 
 As the project is in continuous development, to parse for a stat we recommend doing it by column header instead of position.
+
+---
+
+## launchpad
+
+Zero-LLM action router over the tracker. Reads each open `Evaluated` row's
+report Machine Summary YAML, assigns a readiness tier, names the blocking gap
+(fixable vs structural), and recommends the canonical `set-status` path. Never
+writes the tracker directly; dismiss/restore state persists in
+`data/launchpad-state.json` (user layer).
+
+```bash
+node launchpad.mjs                  # human-readable tier view
+node launchpad.mjs --summary        # one line per open row
+node launchpad.mjs --json           # machine-readable
+node launchpad.mjs --dismiss 8 16   # hide rows from future runs
+node launchpad.mjs --reedit 8       # restore a hidden row
+node launchpad.mjs --self-test
+```
+
+Tier rules (defaults in `launchpad.mjs`): `SKIP` < 3.5; a `fixable` blocker
+(portfolio/comp/CV) forces `PREP` even at high score; a `structural` blocker
+(relocation/visa/language/in-person or a non-empty `hard_stops`) forces `HOLD`;
+no blocker + score ≥ 4.0 → `ACT`. Adjust thresholds per user preference in
+`modes/_custom.md` / on the spot.
+
+---
+
+## proof-point-bank
+
+Manages unpublished→published project artifacts as an asset that unblocks
+launchpad rows. Ledger is `data/proof-points.tsv` (user layer). Shows which
+open launchpad rows (score ≥ 3.5) each published proof (demo / agent / eval
+harness) would unblock.
+
+```bash
+node proof-point-bank.mjs --list
+node proof-point-bank.mjs --add "RAG eval harness" --status building --blocks "eval|harness|demo"
+node proof-point-bank.mjs --set "RAG eval harness" published --url https://github.com/…
+node proof-point-bank.mjs --unblocks       # which rows (≥3.5) each published proof clears
+node proof-point-bank.mjs --self-test
+```
+
+Statuses: `idea | building | published`. `--unblocks` filters to score ≥ 3.5 so
+a 2.x SKIP row never revives by publishing.
+
+---
+
+## watch-deadlines
+
+Deadline-native flagger (distinct from followup-cadence's wait-based model).
+Reads explicit date markers in tracker Notes / Report cells on open rows and
+follow-ups table rows, then reports anything inside a lookahead (default 7d)
+or over-past. Markers: `respond-by`, `reply-by`, `offer expires`, `window`,
+`by`, `due` + a `YYYY-MM-DD`.
+
+```bash
+node watch-deadlines.mjs --lookahead 7   # report deadlines in next 7d
+node watch-deadlines.mjs --json
+node watch-deadlines.mjs --self-test
+```
+
+---
+
+## close-loop
+
+Turns a rejected (or failing) row's report gaps into a proposed edit target —
+`cv.md`, `modes/_profile.md`, or a launchpad-prep task. Routes by gap type:
+portfolio/demo/github → launchpad-prep; framing/narrative/archetype →
+`_profile.md`; otherwise `cv.md`. Proposes only; any write is confirm-by-the-user.
+
+```bash
+node close-loop.mjs <row#>          # proposal for that row
+node close-loop.mjs <row#> --json
+node close-loop.mjs --self-test
+```
+
+---
+
+## ingest-linkedin
+
+Parses LinkedIn job-alert text (or a file) into pending `- [ ] {url}` rows in
+`data/pipeline.md`, deduped by URL against existing pending/processed lines. No
+Gmail API key required — it is pure text parsing.
+
+```bash
+node ingest-linkedin.mjs --text "<alert body>"
+node ingest-linkedin.mjs --file alert.txt
+node ingest-linkedin.mjs --json       # extracted links, no write
+node ingest-linkedin.mjs --self-test
+```
+
+---
+
+## salary-trend
+
+Folds every report's Machine Summary `advertised_comp` into role-family band
+spans + median, drawn against `config/profile.yml` `compensation.target_range`,
+so you can see whether your target is realistically on offer in the roles you
+compete for.
+
+```bash
+node salary-trend.mjs                 # per-family bands
+node salary-trend.mjs --json
+node salary-trend.mjs --family swe-ai   # filter one family
+node salary-trend.mjs --self-test
+```
+
+Role families: `swe-ai`, `pm`, `architect`, `solutions`, `strategist`, `em`,
+`infra`, `other` (company-agnostic).
+
+---
+
+## story-bank-seed
+
+Sweeps every report's `## F) Interview Plan` STAR+R table into
+`interview-prep/story-bank.md` (deduped by title, recurrence-counted). Feeds
+the interview suite — `match-star`, `negotiation-roi`, and the interview modes
+all read this file, so this bridges a bank that was never seeded.
+
+```bash
+node story-bank-seed.mjs              # write interview-prep/story-bank.md
+node story-bank-seed.mjs --preview    # print, don't write
+node story-bank-seed.mjs --json
+node story-bank-seed.mjs --self-test
+```
+
+The written file is user layer (gitignored). It never touches reports or the
+tracker.
+
+---
+
+## apply-queue
+
+Caretaker over the launchpad ACTIVE rows. Surfaces the cover→email→apply chain
+(draft-only) per row, and — only with an explicit `--complete <row#>`, after
+YOU actually submitted — marks the row Applied via `set-status` and seeds its
+first follow-up via `followup-seed`. Never auto-applies.
+
+```bash
+node apply-queue.mjs                    # the queue from launchpad ACTIVE rows
+node apply-queue.mjs --json
+node apply-queue.mjs --draft <row#>     # the chain for one row
+node apply-queue.mjs --complete <row#>  # record a done apply (after you submit)
+```
+
+---
+
+## warmup
+
+Session-start operating-rhythm digest: health (doctor), launchpad ACTIVE rows,
+deadlines, proof-points in progress, and salary-fit in one read-only screen.
+Runs the other zero-LLM tools; never recomputes anything.
+
+```bash
+node warmup.mjs            # the full digest
+node warmup.mjs --fast     # skip the salary-trend call
+node warmup.mjs --json
+node warmup.mjs --self-test
+```
+
+---
+
+## proof-portfolio
+
+Drafts a hiring-ready case-study README for a published proof-point, sourced
+only from your own `cv.md` + `data/proof-points.tsv` (no fabrication). It does
+not write to your portfolio repo — you publish.
+
+```bash
+node proof-portfolio.mjs --proof "RAG eval harness"
+node proof-portfolio.mjs --all
+node proof-portfolio.mjs --json
+node proof-portfolio.mjs --self-test
+```
+
+---
+
+## negotiate
+
+One-screen negotiation briefing for a tracker row: market band (salary-trend),
+verified story-bank ROI (negotiation-roi), and the comp gap (salary-gap
+`--stated-for`). Read-only; it drafts nothing you don't ask for.
+
+```bash
+node negotiate.mjs 8
+node negotiate.mjs --row 8 --json
+node negotiate.mjs --self-test
+```
+
+---
+
+## rejection-reset
+
+Advisory companion that, after a rejection, re-surfaces the close-loop CV/prep
+edit and the row's launchpad state so the toolkit self-renews. Scans for
+rejected rows or targets one with `--row`.
+
+```bash
+node rejection-reset.mjs                  # scan for recently-rejected rows
+node rejection-reset.mjs --row 42
+node rejection-reset.mjs --row 42 --json
+node rejection-reset.mjs --self-test
+```
+
+Never edits cv.md/_profile.md or the tracker.
+
+---
+
+## screen-check
+
+Estimates resume-screen outcome (PASS / MARGINAL / FAIL) per open row from the
+report's `hard_stops` + `soft_gaps` + `final_decision` (and optionally the
+jd-skill-gap result). The gate that matters before the subjective score. A
+decision aid, not a guarantee.
+
+```bash
+node screen-check.mjs                     # all open rows
+node screen-check.mjs --row 8             # one row
+node screen-check.mjs --json
+node screen-check.mjs --self-test
+```
+
+---
+
+## archetype-cv
+
+Shows what a tailored CV *looks like* for each target archetype from
+`config/profile.yml` — headline, summary lead, and skills-first ordering —
+drawn only from your own cv.md/profile (reordered, never fabricated). The
+calibrated target for `/career-ops pdf` / `latex` tailoring.
+
+```bash
+node archetype-cv.mjs --archetype ai
+node archetype-cv.mjs --json
+node archetype-cv.mjs --self-test
+```
+
+---
+
+## strengths-audit
+
+Periodic check that your CV is improving, not drifting: proof-points in the
+ledger (total/published), core sections present, approximate length, and a
+verify-cv-facts cleanliness signal. Advisory — never fails a run.
+
+```bash
+node strengths-audit.mjs
+node strengths-audit.mjs --json
+node strengths-audit.mjs --self-test
+```
+
+---
+
+## concentration
+
+Portfolio concentration: share of your open evaluated pipeline per employer,
+warns at ≥40% single-company exposure. Surfaces the honest risk when the
+highest-scoring roles cluster at a few companies.
+
+```bash
+node concentration.mjs
+node concentration.mjs --row-count 8     # top companies by row share
+node concentration.mjs --json
+node concentration.mjs --self-test
+```
+
+---
+
+## expected-value
+
+Ranks open rows by expected value so you work the highest-value prep first:
+`EV ≈ (probability the prep clears the blocker) × (score) × (comp factor)`.
+Probabilities: fixable → 0.85, structural → 0.2, none → 1.0. Read-only.
+
+```bash
+node expected-value.mjs
+node expected-value.mjs --row 8
+node expected-value.mjs --json
+node expected-value.mjs --self-test
+```
