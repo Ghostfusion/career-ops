@@ -137,6 +137,12 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `close-loop.mjs` | Turns a rejected row's report gaps into a proposed CV/_profile.md/launchpad-prep edit — confirm-before-write (JSON or `--summary`) |
 | `ingest-linkedin.mjs` | Parses LinkedIn job-alert text into pending `- [ ] {url}` pipeline rows, deduped by URL (JSON) |
 | `salary-trend.mjs` | Folds report `advertised_comp` into role-family advertised-band spans + median vs profile target (JSON or `--summary`) |
+| `story-bank-seed.mjs` | Sweeps every report's Block F interview Plan STAR+R table into `interview-prep/story-bank.md` (deduped by title, recurrence-counted) — feeds the interviewers that read the bank (JSON or `--preview`) |
+| `apply-queue.mjs` | The on layer over launchpad: surfaces ACTIVE rows, chains cover→email→apply (draft-only), and records a done apply via `--complete` (marks Applied + seeds follow-up) never auto-applies |
+| `warmup.mjs` | Session-start operating-rhythm digest: health + launchpad tiers + deadlines + proof-points + salary-fit in one read-only screen |
+| `proof-portfolio.mjs` | Drafts hiring-ready case-study READMEs for published proof-points, sourced only from your own files (no fabrication) |
+| `negotiate.mjs` | One-screen negotiation brief: market band (salary-trend) + verified story-bank ROIs (negotiation-roi) + comp gap for a tracker row |
+| `rejection-reset.mjs` | After a rejection, re-surfaces the row's launchpad state + the close the CV/prep edit so counselors run continues (advisory only) |
 | `reports/` | Evaluation reports `{###}-{company-slug}-{YYYY-MM-DD}.md` — Blocks A-F + G (Posting Legitimacy) + Risk Summary + `## Machine Summary` YAML; header includes `**Legitimacy:** {tier}` |
 
 ### Plugins (optional)
@@ -329,6 +335,13 @@ Two separate axes:
 | Wants to avoid missing a reply-by / offer / interview deadline | `watch-deadlines` — flag upcoming deadlines from tracker notes + follow-ups (`watch-deadlines.mjs`) |
 | Wants to learn from a rejection so the profile improves | `close-loop` — propose a concrete CV/portfolio/prep edit from a rejected row's gaps (`close-loop.mjs`) |
 | Wants to import LinkedIn job alerts into the pipeline | `ingest-linkedin` — parse alert text into pending `- [ ] {url}` rows, deduped (`ingest-linkedin.mjs`) |
+| Wants to check target comp is realistically on offer | `salary-trend` — advertised-band span by role family vs profile target (`salary-trend.mjs`) |
+| Wants a session-start operating-rhythm digest | `warmup` — health + launchpad tiers + deadlines + proofs + salary-fit in one read-only screen (`warmup.mjs`) |
+| Wants to build/refresh the interview STAR story bank from evaluations | `story-bank-seed` — sweep every report's Block F into `interview-prep/story-bank.md` (`story-bank-seed.mjs`) |
+| Wants a caretaker that walks the launchpad ACTIVE rows to submission | `apply-queue` — surfaces ACTIVE rows + the cover→email→apply chain; records a done apply via `--complete` (`apply-queue.mjs`) |
+| Wants a hiring-ready case-study draft for a published proof | `proof-portfolio` — drafts a README-style one-pager from your own files (`proof-portfolio.mjs`) |
+| Wants a negotiation briefing for a specific offer | `negotiate` — market band + verified ROIs + comp gap (`negotiate.mjs`) |
+| Wants to re-file a rejection into the CV/prep loop | `rejection-reset` — surfaces the row's close-loop edit and launchpad state after reject (`rejection-reset.mjs`) |
 | Wants to check target comp is realistically on offer | `salary-trend` — advertised-band span by role family vs profile target (`salary-trend.mjs`) |
 | Wants to classify application replies and review updates | `reply-watch` — classifies replies, matches to applications, suggests tracker updates |
 | Wants to record application outcome & archive artifacts | `outcome` |

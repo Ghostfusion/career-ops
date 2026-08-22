@@ -33,6 +33,12 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `offer-prep.md` | `offer-prep` | Contract reading companion (offer stage) |
 | `followup.md` | `followup` | Follow-up cadence tracker |
 | `launchpad.md` | `launchpad` | Turn evaluated rows into an action queue (ACT / PREP / HOLD / SKIP) |
+| `story-bank-seed.mjs` | `story-bank-seed` | Sweep report Block F into `interview-prep/story-bank.md` |
+| `apply-queue.mjs` | `apply-queue` | Caretaker over launchpad ACTIVE rows → submission chain |
+| `warmup.mjs` | `warmup` | Session-start operating-rhythm digest |
+| `proof-portfolio.mjs` | `proof-portfolio` | Case-study README for a published proof |
+| `negotiate.mjs` | `negotiate` | One-screen negotiation brief |
+| `rejection-reset.mjs` | `rejection-reset` | After a rejection, re-list close-loop + launchpad state |
 | `applied.md` | `applied` | Companion applied-search toolkit: proof-point-bank, watch-deadlines, close-loop, ingest-linkedin, salary-trend |
 | `reply-watch.md` | `reply-watch` | Classify employer replies, reconcile tracker |
 | `outcome.md` | `outcome` | Record application outcome & archive artifacts |

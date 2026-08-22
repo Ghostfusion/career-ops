@@ -8,7 +8,7 @@ description: >-
 arguments: mode
 user_invocable: true
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | batch | tracker | agent-inbox | pipeline | contacto | training | project | interview-prep | interview | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | offer-prep | titles | upskill | followup | launchpad | applied | reply-watch | outcome | update]"
+argument-hint: "[scan | discover | deep | pdf | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | batch | tracker | agent-inbox | pipeline | contacto | training | project | interview-prep | interview | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | offer-prep | titles | upskill | followup | launchpad | applied | story-bank-seed | apply-queue | warmup | reply-watch | outcome | update]"
 license: MIT
 ---
 
@@ -79,6 +79,9 @@ Determine the mode from `$mode`:
 | `interview-redflag` | `interview-redflag` |
 | `launchpad` | `launchpad` |
 | `applied` | `applied` |
+| `story-bank-seed` | `story-bank-seed` |
+| `apply-queue` | `apply-queue` |
+| `warmup` | `warmup` |
 | `update` | `update` |
 | `cover` | `cover` |
 
@@ -159,6 +162,9 @@ Available commands:
   /career-ops followup  → Follow-up cadence tracker: flag overdue, generate drafts
   /career-ops launchpad → Turn evaluated rows into an action-ready queue (ACT/PREP/HOLD/SKIP)
   /career-ops applied  → Applied-search toolkit: proof-points, deadlines, close-loop, ingest, salary-trend
+  /career-ops warmup   → Operating-rhythm digest (health + tiers + deadlines)
+  /career-ops story-bank-seed → Build interview-prep/story-bank.md from evaluations
+  /career-ops apply-queue     → Caretaker over the launchpad ACTIVE rows → submission
   /career-ops outcome   → Record application outcome & archive artifacts
   /career-ops update    → Update career-ops system files with diff preview + compat check
 
