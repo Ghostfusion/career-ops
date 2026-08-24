@@ -2,6 +2,39 @@
 
 When the user asks to prep for an interview at a specific company+role, or when an evaluation scores 4.0+ and the user updates status to `Interview`, run this mode.
 
+## Flags (optional)
+
+Both flags are optional and control the generated question pack. When absent, the mode keeps its current behavior (per-audience likely questions, no fixed count).
+
+| Flag | Values | What it does |
+|------|--------|-------------|
+| `--questions N` | positive integer (default 50) | Target total count of interview questions to generate. The mode builds a pack of N questions across the mix. |
+| `--types <split>` | comma or `+` separated spec | Controls the question-type mix. Tokens are `type:count`, e.g. `behavioral:20,technical:15,company:8`. |
+
+**`--types` split spec** — recognized types:
+
+| Type | Meaning | Example |
+|------|---------|---------|
+| `behavioral` | Standard US behavioral/STAR staples | "Tell me about yourself", "greatest weakness", "why us?" |
+| `technical` | Role-specific, drawn from the JD's hard requirements | "Walk me through your RAG pipeline", "how do you tune SQL Server performance?" |
+| `company` | Company-specific fit + research | "Why this company?", "what do you know about our stack?" |
+| `situational` | Hypothetical in-the-moment scenarios | "How would you handle a teammate who…" |
+| `closing` | Questions to ask the interviewer | "What does success in this role look like?" |
+
+If the split doesn't sum to `--questions`, scale proportionally (round the largest type up the remainder). If `--types` is absent, distribute the requested `--questions` across the default split below.
+
+**Default 50-question split** (US-focused — standard + technical):
+
+| Type | Count | Source |
+|------|-------|--------|
+| behavioral | 20 | Standard US staples + STAR matched to `interview-prep/story-bank.md` |
+| technical | 15 | JD-derived (`[inferred from JD]`) + real Glassdoor/LeetCode-sourced |
+| company | 8 | Step 1 research (why this company, stack, team) |
+| situational | 8 | STAR-adjacent "what would you do" scenarios |
+| closing | 2 | Sharp questions to ask back |
+
+That yields **50 total** — all standard US questions covered plus technical depth.
+
 ## Inputs
 
 1. **Company name** and **role title** (required)
@@ -235,6 +268,30 @@ This is where the original Technical / Role-Specific buckets live. Peers are eva
 - **Technical questions** (system design, coding, architecture, domain) — for each: the question, source, and what a strong answer looks like for this candidate specifically (reference CV proof points).
 - **Role-specific questions** tied to the JD archetype — for each: the question, why they're likely asking it (which JD requirement it maps to), and the candidate's best angle.
 - **Reverse questions** — about on-call, code review culture, deployment cadence, what surprised them when they joined.
+
+### Step 4.5 — Assemble the N-Question Pack (when `--questions` / `--types` are used)
+
+If the user passed `--questions` (or `--types`), produce a **single numbered question pack** alongside the per-audience prep. Resolve the count and the split:
+
+1. **Target total** = `--questions` (default 50).
+2. **Split** = `--types` if given (e.g. `behavioral:20,technical:15,company:8,situational:8,closing:2`); otherwise the default in the Flags table above.
+3. If the split does not exactly sum to the target, scale proportionally and round the largest type up by the remainder so the total hits the target exactly.
+4. Build the pack by **drawing from each audience's prepared questions** (Step 4) + the standard US staples + `[inferred from JD]` technical questions from the JD analysis (Step 6). Never fabricate — source-tag every question: `[sourced: Glassdoor YYYY-MM-DD]`, `[inferred from JD]`, `[standard US]`, or `[matched STAR #N]`.
+
+**Pack format** (a single numbered list 1..N):
+
+```markdown
+## Interview Question Pack ({N} questions) — {Company} · {Role}
+
+1. {question}  — {type}  ({source tag})
+   Answer hint: {result-first draft using cv.md + story-bank evidence}
+2. {question}  — {type}  ({source tag})
+   ...
+```
+
+**Guarantee the standard-US coverage:** within the `behavioral` count, always include the core staples — "Tell me about yourself," "Why do you want to leave / why are you looking?," "What are your strengths / greatest weakness?", "Tell me about a time you failed," "Tell me about a conflict", "Why this company?", "What salary are you looking for?", "Where do you see yourself?" — so a full standard US interview is covered.
+
+**Guarantee the technical coverage:** the `technical` count must be populated from the JD's actual hard requirements (the candidate's real skills) — never generic filler. For a GenAI role that means RAG, agents, LLM evaluation, retrieval; for a .NET role it means SQL Server performance, architecture, C#/.NET internals. If the JD is thin, tag the technical questions `[inferred from JD]` and stay honest.
 
 ### Audience: `panel-mixed`
 
