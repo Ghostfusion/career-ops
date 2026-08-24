@@ -73,6 +73,39 @@ function extractBlockF(text) {
   return m ? m[0] : null;
 }
 
+// Derive a theme + search tags per story from its title + JD requirement + S/T/A
+// text, so the seeded bank plays well with match-star's tag-based matching.
+function themeFor(story) {
+  const hay = `${story.title} ${story.jdReq ?? ''}`.toLowerCase();
+  if (/agent|workflow|automation|orchestrat/.test(hay)) return 'Agents & Automation';
+  if (/rag|retriev|vector|embedding|chunk/.test(hay)) return 'Retrieval & RAG';
+  if (/eval|llm|model|inference/.test(hay)) return 'LLM & Evaluation';
+  if (/architect|platform|delivery|enterprise/.test(hay)) return 'Enterprise Architecture';
+  if (/adopt|enable|influence|leadership|team/.test(hay)) return 'Adoption & Influence';
+  if (/guardrail|security|compliance|governance|data/.test(hay)) return 'Safety & Guardrails';
+  if (/ui|interface|streamlit|gradio|demo/.test(hay)) return 'AI UX & Prototyping';
+  return 'General';
+}
+
+function tagsFor(story) {
+  const hay = `${story.title} ${story.jdReq ?? ''} ${story.s} ${story.t} ${story.a} ${story.r}`.toLowerCase();
+  const tags = new Set();
+  const map = {
+    agent: 'agents', workflow: 'agents', orchestration: 'agents',
+    rag: 'rag', retrieval: 'rag', embedding: 'rag', vector: 'rag',
+    llm: 'llm', model: 'llm', eval: 'evaluation', evaluation: 'evaluation',
+    langchain: 'langchain', crewai: 'crewai', autogen: 'autogen',
+    enterprise: 'enterprise', consulting: 'consulting', architecture: 'architecture',
+    sql: 'sql-server', '.net': '.net', 'c#': 'c#', database: 'sql-server', perf: 'performance',
+    adoption: 'adoption', influence: 'influence', leadership: 'leadership',
+    guardrail: 'guardrails', security: 'security', compliance: 'compliance',
+    streamlit: 'streamlit', gradio: 'gradio', demo: 'demo',
+  };
+  for (const [k, v] of Object.entries(map)) if (hay.includes(k)) tags.add(v);
+  if (tags.size === 0) tags.add('general');
+  return [...tags];
+}
+
 function render(items) {
   const parts = [
     '# Story Bank',
@@ -83,9 +116,12 @@ function render(items) {
     '',
   ];
   for (const it of items) {
-    parts.push(`### ${it.story.title}`);
+    const theme = themeFor(it.story);
+    const tags = tagsFor(it.story);
+    parts.push(`### [${theme}] ${it.story.title}`);
     parts.push('');
     parts.push(`**Source:** from ${it.source} (${it.count}×)`);
+    parts.push(`**Best for questions about:** ${tags.join(', ')}`);
     parts.push(`**S (Situation):** ${it.story.s}`);
     parts.push(`**T (Task):** ${it.story.t}`);
     parts.push(`**A (Action):** ${it.story.a}`);
@@ -113,6 +149,8 @@ if (args.includes('--self-test')) {
     ['reflection', r[0].reflection === 'orchestration'],
     ['field s', r[1].s === 'silo doc'],
     ['skips 3-col lines', rowsOf('| 1 | x | y |').length === 0],
+    ['theme derivation', themeFor(r[0]) === 'Agents & Automation' && themeFor(r[1]) === 'Retrieval & RAG'],
+    ['tag derivation', tagsFor(r[0]).includes('agents') && tagsFor(r[1]).includes('rag')],
   ];
   let n = 0;
   for (const [name, ok] of checks) { console.log(`  ${ok ? '✅' : '❌'} ${name}`); if (ok) n++; }

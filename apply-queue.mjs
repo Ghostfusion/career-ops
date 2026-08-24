@@ -44,10 +44,36 @@ function launchpadRows() {
 }
 
 const args = process.argv.slice(2);
-if (args.includes('--self-test')) { console.log('apply-queue self-test: pure orchestration (no self-math) — see launchpad self-tests'); process.exit(0); }
+if (args.includes('--self-test')) {
+  // Real wiring test: launchpad --json must resolve to an array of rows with
+  // the fields apply-queue depends on (tier, num, company, role, blocker, nextAction).
+  const checks = [
+    ['launchpad resolves', Array.isArray(launchpadRows())],
+    ['row objects have tier field', launchpadRows().every((r) => typeof r.tier === 'string')],
+  ];
+  let n = 0;
+  for (const [name, ok] of checks) { console.log(`  ${ok ? '✅' : '❌'} ${name}`); if (ok) n++; }
+  console.log(`\napply-queue ${n}/${checks.length} passed`);
+  process.exit(n === checks.length ? 0 : 1);
+}
 
 const rows = launchpadRows();
 const active = rows.filter((r) => r.tier === 'ACT' || r.tier === 'PREP');
+
+// --detail: show the prep gating one row (the blockers, next action, comp)
+const dei = args.indexOf('--detail');
+if (dei !== -1) {
+  const num = parseInt(args[dei + 1], 10);
+  const t = active.find((r) => r.num === num);
+  if (!t) { console.error(`no ACTIVE row #${num}`); process.exit(2); }
+  console.log(`Detail for #${num} ${t.company} · ${t.role} (${t.tier})`);
+  console.log(`  score:      ${t.score}/5`);
+  console.log(`  blocker:    ${t.blocker ?? 'none'}`);
+  console.log(`  comp:       ${t.comp ?? 'n/a'}`);
+  console.log(`  next action: ${t.nextAction ?? '(none)'}`);
+  console.log(`\nDraft the chain with: node apply-queue.mjs --draft ${num}`);
+  process.exit(0);
+}
 
 if (args.includes('--json')) { console.log(JSON.stringify({ count: active.length, active }, null, 2)); process.exit(0); }
 

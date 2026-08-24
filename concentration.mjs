@@ -81,6 +81,18 @@ const topPair = Object.entries(byCompany).sort((a, b) => b[1].count - a[1].count
 
 if (args.includes('--json')) { console.log(JSON.stringify(byCompany, null, 2)); process.exit(0); }
 if (uniq === 0) { console.log('no open evaluated rows to concentration-check'); process.exit(0); }
+
+// --row-count N: top N companies by row share (e.g. just the biggest holders)
+const rcIdx = args.indexOf('--row-count');
+if (rcIdx !== -1) {
+  const n = parseInt(args[rcIdx + 1], 10);
+  const k = Number.isInteger(n) && n > 0 ? n : 6;
+  const ranked = Object.entries(byCompany).sort((a, b) => b[1].count - a[1].count).slice(0, k);
+  console.log(`concentration — top ${k} employer(s) by open-row share (of ${rows.length} rows)`);
+  for (const [name, g] of ranked) console.log(`  · ${name.padEnd(14)} ${g.count} row(s)  ${g.share}%`);
+  process.exit(0);
+}
+
 console.log('concentration — how much of your pipeline rests on one employer?');
 console.log(`  ${rows.length} open rows across ${uniq} companies`);
 for (const [name, g] of Object.entries(byCompany).sort((a, b) => b[1].count - a[1].count).slice(0, 6)) {

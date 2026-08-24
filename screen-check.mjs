@@ -92,7 +92,7 @@ function skillGapHint(jdPath) {
   try {
     const out = execFileSync('node', [join(__dir, 'jd-skill-gap.mjs'), jdPath, '--json'], { encoding: 'utf8', maxBuffer: (1 << 22) }).trim();
     const parsed = JSON.parse(out);
-    if (parsed.lowConfidence) return null;
+    if (parsed.lowConfidence) return { lowConfidence: parsed.lowConfidence.reason || 'unparsable JD' };
     return { existing: (parsed.existing || []).length, supported: (parsed.supportedByResume || []).length, gaps: (parsed.gap || []).length };
   } catch { return null; }
 }
@@ -146,6 +146,7 @@ for (const r of viewed) {
   console.log(`  ${icon} #${r.num} ${r.company} · ${r.role} · ${r.score}/5 → ${r.outcome}`);
   if (r.reason && r.outcome !== 'PASS') console.log(`        ${r.reason.slice(0, 110)}`);
   if (r.jdSkillGap && (r.jdSkillGap.gaps || 0) > 0) console.log(`        jd-skill-gap: ${r.jdSkillGap.gaps} skill gap(s) in the requirements`);
+  else if (r.jdSkillGap && r.jdSkillGap.lowConfidence) console.log(`        jd-skill-gap: not run (${r.jdSkillGap.lowConfidence})`);
 }
 console.log('\n(Screen outcomes vary by recruiter; hard gates are the dependable blockers.)');
 process.exit(0);
