@@ -136,7 +136,7 @@ Available commands:
   /career-ops ofertas   → Compare and rank multiple offers
   /career-ops contacto  → LinkedIn power move: find contacts + draft message
   /career-ops deep      → Deep research prompt about company
-  /career-ops interview-prep → Generate company-specific interview prep doc
+  /career-ops interview-prep → Company-specific interview prep doc (--questions N, --types split for a fixed-size pack; default 50)
   /career-ops interview    → Interactive profile/CV onboarding interview
   /career-ops eu-swe    → Calibrate a European SWE application before CV/apply/interview
   /career-ops eu-fintech → Scan 21 EU fintech portals for Product Manager roles (zero-token)

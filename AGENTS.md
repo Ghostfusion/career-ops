@@ -309,7 +309,7 @@ Two separate axes:
 | Wants LinkedIn outreach | `contacto` — identifies hiring manager, recruiter, or team peers via web search; drafts a message tailored to the contact type (recruiter / hiring manager / peer / interviewer), within LinkedIn's connection-request character limit for the account's tier (200 free, 300 Premium/Sales Navigator) |
 | Wants a formal application email | `email` — draft-only subject, body, attachment checklist, and contact block from a report or JD; never sends, submits, or clicks anything |
 | Asks for company research | `deep` — structured 6-axis research prompt (AI strategy, recent moves, engineering culture, likely challenges, competitors, candidate's angle) |
-| Preps for interview at specific company | `interview-prep` |
+| Preps for interview at specific company | `interview-prep` — add `--questions 50` (default) for a fixed-size question pack, and/or `--types behavioral:20,technical:15,company:8,situational:8,closing:2` to control the type mix (scales to any `--questions` count; every question source-tagged, technical ones drawn from the JD's real requirements) |
 | Wants a time-blocked prep plan for an upcoming interview | `interview/plan` |
 | Wants to run practice interview questions with feedback | `interview/practice` |
 | Wants to debrief after a real interview and close gaps | `interview/debrief` |
