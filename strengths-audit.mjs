@@ -16,16 +16,18 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 const SKILL_SECTIONS = ['Skills', 'Professional Summary', 'Work Experience', 'Education', 'Certifications'];
 
 function audit() {
-  const p = join(__dir, 'cv.md');
+  const p = join(CAREER_OPS, 'cv.md');
   return existsSync(p) ? readFileSync(p, 'utf8') : '';
 }
 function proofCounts() {
-  const p = join(__dir, 'data', 'proof-points.tsv');
+  const p = join(CAREER_OPS, 'data', 'proof-points.tsv');
   if (!existsSync(p)) return { total: 0, published: 0, inprogress: 0 };
   const lines = readFileSync(p, 'utf8').split('\n').filter(Boolean).slice(1);
   let total = 0, published = 0;

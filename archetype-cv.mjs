@@ -17,13 +17,15 @@
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 let _cv = null;
 function cv() {
   if (_cv) return _cv;
-  const p = join(__dir, 'cv.md');
+  const p = join(CAREER_OPS, 'cv.md');
   const summary = existsSync(p) ? (readFileSync(p, 'utf8').match(/# Professional Summary[\s\S]*?(?=\n## |$)/) || [''])[0]?.replace(/#[^\n]*/g, '').trim() || '' : '';
   _cv = { summary };
   return _cv;

@@ -21,12 +21,14 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow, parseTrackerRow, extractTrackerReportNumbers } from './tracker-parse.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 // ── report + tracker reading ─────────────────────────────────────────────────
 function resolveReportPath(num) {
-  const base = join(__dir, 'reports');
+  const base = join(CAREER_OPS, 'reports');
   if (!existsSync(base)) return null;
   try {
     const hit = readdirSync(base).find((f) => new RegExp(`^0*${num}-[^/]+\\.md$`, 'i').test(f));
@@ -54,7 +56,7 @@ function readReportYaml(p) {
 function strip(s) { return String(s).trim().replace(/^(["'])(.*)\1$/, '$2'); }
 
 function trackerRow(num) {
-  const appsFile = resolveTrackerPath(__dir);
+  const appsFile = resolveTrackerPath(CAREER_OPS);
   if (!existsSync(appsFile)) return null;
   const lines = readFileSync(appsFile, 'utf8').split('\n');
   const colmap = resolveColumns(lines);

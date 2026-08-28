@@ -30,9 +30,11 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync, renameSync } from 'fs';
 import { resolveColumns, extractTrackerReportNumbers, isSeparatorRow, isHeaderRow } from './tracker-parse.mjs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const statePath = join(__dir, 'data', 'launchpad-state.json');
+const CAREER_OPS = getCareerOpsRoot();
+const statePath = join(CAREER_OPS, 'data', 'launchpad-state.json');
 
 // ── Tier thresholds. Sensible defaults; the launchpad.md mode adjusts these
 // per the user's stated preference (and profile.yml launchpad: block) without
@@ -90,7 +92,7 @@ function classifyBlocker(yaml) {
 }
 
 function resolveReportPath(num) {
-  const base = join(__dir, 'reports');
+  const base = join(CAREER_OPS, 'reports');
   if (!existsSync(base)) return null;
   try {
     const hit = readdirSync(base).find((f) => new RegExp(`^0*${num}-[^/]+\\.md$`, 'i').test(f));
@@ -187,7 +189,7 @@ if (ri !== -1) {
   console.error('failed to write launchpad-state.json'); process.exit(4);
 }
 
-const appsFile = resolveTrackerPath(__dir);
+const appsFile = resolveTrackerPath(CAREER_OPS);
 const rows = computeLaunchpad(appsFile, dismissed);
 
 if (args.includes('--json')) { console.log(JSON.stringify(rows, null, 2)); process.exit(0); }

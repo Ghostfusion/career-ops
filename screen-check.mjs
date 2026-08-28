@@ -23,8 +23,10 @@ import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
 import { resolveColumns, isSeparatorRow, isHeaderRow } from './tracker-parse.mjs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 // ── report YAML (shared shape with launchpad / salary-trend) ─────────────────
 function yamlOf(reportPath) {
@@ -48,7 +50,7 @@ function yamlOf(reportPath) {
 function strip(s) { return String(s).trim().replace(/^(["'])(.*)\1$/, '$2'); }
 
 function resolveReport(num) {
-  const base = join(__dir, 'reports');
+  const base = join(CAREER_OPS, 'reports');
   if (!existsSync(base)) return null;
   try {
     const hit = readdirSync(base).find((f) => new RegExp(`^0*${num}-[^/]+\\.md$`, 'i').test(f));
@@ -114,7 +116,7 @@ if (args.includes('--self-test')) {
 }
 
 // collect tracker open rows
-const appsFile = resolveTrackerPath(__dir);
+const appsFile = resolveTrackerPath(CAREER_OPS);
 const lines = existsSync(appsFile) ? readFileSync(appsFile, 'utf8').split('\n') : [];
 let colmap = null;
 try { colmap = resolveColumns(lines); } catch {}

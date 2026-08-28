@@ -21,9 +21,11 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const pipelinePath = join(__dir, 'data', 'pipeline.md');
+const CAREER_OPS = getCareerOpsRoot();
+const pipelinePath = join(CAREER_OPS, 'data', 'pipeline.md');
 
 const LINK_RE = /https?:\/\/www\.linkedin\.com\/jobs\/view\/[^\s)"'<>]+|https?:\/\/www\.linkedin\.com\/jobs\/search[^\s)"'<>]*|https?:\/\/lnkd\.in\/[A-Za-z0-9_-]+/gi;
 

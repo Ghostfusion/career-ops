@@ -25,9 +25,11 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const queuePath = join(__dir, 'data', 'apply-queue.json');
+const CAREER_OPS = getCareerOpsRoot();
+const queuePath = join(CAREER_OPS, 'data', 'apply-queue.json');
 const LAUNCHPAD = join(__dir, 'launchpad.mjs');
 
 function readQueue() { try { return JSON.parse(readFileSync(queuePath, 'utf8')).queue || []; } catch { return []; } }

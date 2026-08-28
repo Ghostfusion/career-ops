@@ -20,8 +20,10 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, readdirSync } from 'fs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 // ── report YAML read ─────────────────────────────────────────────────────────
 function readReportYaml(p) {
@@ -93,7 +95,7 @@ if (args.includes('--self-test')) {
 }
 
 // ── gather ───────────────────────────────────────────────────────────────────
-const base = join(__dir, 'reports');
+const base = join(CAREER_OPS, 'reports');
 const famMap = {};
 if (existsSync(base)) {
   for (const file of readdirSync(base)) {

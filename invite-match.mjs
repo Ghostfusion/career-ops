@@ -34,18 +34,14 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { join } from 'path';
 import { execFileSync } from 'child_process';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
+import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
-import { resolveTrackerPath } from './tracker-utils.mjs';
+import { isMainModule } from './lib/is-main-module.mjs';
 
-const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-// Resolve through the same shared tracker-path logic as set-status /
-// merge-tracker / outcome, so a CAREER_OPS_TRACKER override is honored here
-// too — a hardcoded fallback silently returns an empty candidate list for
-// users with a custom tracker path.
+const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
 
 // --- CLI args ---
@@ -85,7 +81,7 @@ const USAGE = `Usage:
 // silent-ignore failure mode this issue exists to close, just moved to a
 // different spelling. Leaving them out means that form is rejected loudly
 // as an unrecognized flag instead.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   validateFlags(args, KNOWN_FLAGS, USAGE);
 }
 
@@ -1120,7 +1116,7 @@ function runSelfTest() {
 }
 
 // --- Run (CLI only; guarded so the module is safely importable for tests) ---
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   if (selfTestMode) {
     runSelfTest();
   } else {

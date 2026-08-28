@@ -24,10 +24,12 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const statePath = join(__dir, 'data', 'launchpad-state.json');
-const apps = join(__dir, 'data', 'applications.md');
+const CAREER_OPS = getCareerOpsRoot();
+const statePath = join(CAREER_OPS, 'data', 'launchpad-state.json');
+const apps = join(CAREER_OPS, 'data', 'applications.md');
 
 function readState() { try { return (JSON.parse(readFileSync(statePath, 'utf8')).dismissed) || []; } catch { return []; } }
 function writeState(dismissed) {

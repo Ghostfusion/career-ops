@@ -27,8 +27,10 @@ import { readFileSync, existsSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { resolveTrackerPath } from './tracker-utils.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow, extractTrackerReportNumbers } from './tracker-parse.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 function yamlOf(p) {
   try {
@@ -47,7 +49,7 @@ function yamlOf(p) {
   } catch { return {}; }
 }
 function resolveReport(num) {
-  const base = join(__dir, 'reports');
+  const base = join(CAREER_OPS, 'reports');
   if (!existsSync(base)) return null;
   try { const hit = readdirSync(base).find((f) => new RegExp(`^0*${num}-[^/]+\\.md$`, 'i').test(f)); return hit ? join(base, hit) : null; } catch { return null; }
 }
@@ -81,7 +83,7 @@ if (args.includes('--self-test')) {
 }
 
 // gather
-const appsFile = resolveTrackerPath(__dir);
+const appsFile = resolveTrackerPath(CAREER_OPS);
 const lines = existsSync(appsFile) ? readFileSync(appsFile, 'utf8').split('\n') : [];
 let colmap = null; try { colmap = resolveColumns(lines); } catch {}
 const evs = [];

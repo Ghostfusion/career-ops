@@ -17,12 +17,14 @@
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 // ── ledger read (shared format with proof-point-bank) ────────────────────────
 function proofs() {
-  const p = join(__dir, 'data', 'proof-points.tsv');
+  const p = join(CAREER_OPS, 'data', 'proof-points.tsv');
   if (!existsSync(p)) return [];
   return readFileSync(p, 'utf8').split('\n').filter(Boolean).slice(1)
     .map((l) => l.split('\t'))
@@ -33,14 +35,14 @@ function proofs() {
 // pull a supporting sentence from cv.md for the "why it matters" line
 function cvLine(pin) {
   try {
-    const t = readFileSync(join(__dir, 'cv.md'), 'utf8');
+    const t = readFileSync(join(CAREER_OPS, 'cv.md'), 'utf8');
     for (const line of t.split('\n')) if (new RegExp(pin, 'i').test(line) && line.trim()) return line.trim();
   } catch {}
   return '';
 }
 function cvSummary() {
   try {
-    const t = readFileSync(join(__dir, 'cv.md'), 'utf8');
+    const t = readFileSync(join(CAREER_OPS, 'cv.md'), 'utf8');
     const m = t.match(/# Professional Summary[\s\S]*?(?=## )/);
     return m ? m[0].replace(/#[^\n]*/g, '').trim() : '';
   } catch { return ''; }

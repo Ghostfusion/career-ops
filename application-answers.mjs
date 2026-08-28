@@ -3,6 +3,8 @@
 import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
 import { resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
+import { getCareerOpsRoot } from './path-resolver.mjs';
+import { isMainModule } from './lib/is-main-module.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -342,6 +344,8 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') args.help = true;
+    else if (arg === '--read') args.read = true;
+    else if (arg === '--strict') args.strict = true;
     else if (arg.startsWith('--')) {
       const value = argv[i + 1];
       if (!value || value.startsWith('--')) {
@@ -357,8 +361,12 @@ function parseArgs(argv) {
 function usage() {
   return [
     'Usage: node application-answers.mjs --report <report.md> --input <answers.json> [--state filled|submitted] [--date YYYY-MM-DD]',
+    '       node application-answers.mjs --report <report.md> --read [--strict]',
     '',
     'The input JSON may contain: freeText, selections, fieldValues, files, date, state.',
+    '--read prints the parsed ## Application Answers snapshot as JSON (null when the section is absent).',
+    '--strict makes --read refuse a partially unreadable section, naming every line it could not parse,',
+    'instead of skipping it. Recovery callers (modes/apply.md) want the refusal; the default stays total.',
   ].join('\n');
 }
 
@@ -373,6 +381,30 @@ async function main() {
   }
   if (args.help) {
     console.log(usage());
+    return;
+  }
+  if (args.strict && !args.read) {
+    console.error(`--strict only applies to --read.\n\n${usage()}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (args.read) {
+    if (args.input || args.state || args.date) {
+      console.error(`--read is read-only and takes no --input, --state or --date.\n\n${usage()}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!args.report) {
+      console.error(usage());
+      process.exitCode = 1;
+      return;
+    }
+    // strict throws with a message naming every unreadable line; main().catch
+    // prints it to stderr and sets a non-zero exit code, which is the contract
+    // modes/apply.md keys on. A report without the section prints null.
+    const reportText = readFileSync(resolve(args.report), 'utf-8');
+    const snapshot = parseApplicationAnswersSection(reportText, { strict: args.strict === true });
+    console.log(JSON.stringify(snapshot, null, 2));
     return;
   }
   if (!args.report || !args.input) {
@@ -391,8 +423,11 @@ async function main() {
   const reportPath = resolve(args.report);
   // Containment: --report is a read+overwrite primitive; constrain it to
   // reports/ so a crafted argument (or untrusted headless prompt) can't
-  // overwrite an arbitrary file anywhere on the machine.
-  const reportsRoot = resolve(__dirname, 'reports');
+  // overwrite an arbitrary file anywhere on the machine. Resolve the reports
+  // root through getCareerOpsRoot() so a data-root override is honored here
+  // too, matching set-status / merge-tracker / outcome.
+  const root = getCareerOpsRoot();
+  const reportsRoot = resolve(root, 'reports');
   const rel = relative(reportsRoot, reportPath);
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error(`--report must be a file under reports/ — got "${args.report}"`);
@@ -409,7 +444,7 @@ async function main() {
   console.log(JSON.stringify({ report: reportPath, date: normalized.date, state: normalized.state }, null, 2));
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main().catch((err) => {
     console.error(err.message);
     process.exitCode = 1;

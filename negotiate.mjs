@@ -22,8 +22,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 const args = process.argv.slice(2);
 
 function run(script, flags = []) {
@@ -40,7 +42,7 @@ function roleForRow(num) {
   // We rely on salary-trend --json's per-family data being present; to map a
   // specific row to a family, we read the tracker + its report's role and use
   // salary-trend's grouping implicitly — a simple role-text match is enough.
-  const apps = join(__dir, 'data', 'applications.md');
+  const apps = join(CAREER_OPS, 'data', 'applications.md');
   if (!existsSync(apps)) return null;
   for (const line of readFileSync(apps, 'utf8').split('\n')) {
     if (!line.trim().startsWith('|')) continue;

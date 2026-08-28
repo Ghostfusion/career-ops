@@ -27,10 +27,12 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync, renameSync } from 'fs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow, extractTrackerReportNumbers } from './tracker-parse.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const ledgerPath = join(__dir, 'data', 'proof-points.tsv');
+const CAREER_OPS = getCareerOpsRoot();
+const ledgerPath = join(CAREER_OPS, 'data', 'proof-points.tsv');
 const HEADER = `name\tstatus\turl\tblocks\tupdated\n`;
 const STATUSES = ['idea', 'building', 'published'];
 
@@ -61,7 +63,7 @@ function now() { return new Date().toISOString().slice(0, 10); }
 
 // ── report YAML + launchpad-row reading ──────────────────────────────────────
 function resolveReportPath(num) {
-  const base = join(__dir, 'reports');
+  const base = join(CAREER_OPS, 'reports');
   if (!existsSync(base)) return null;
   try {
     const hit = readdirSync(base).find((f) => new RegExp(`^0*${num}-[^/]+\\.md$`, 'i').test(f));

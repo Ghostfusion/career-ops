@@ -27,8 +27,10 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow, parseTrackerRow } from './tracker-parse.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 const DAY_MS = 86400000;
 const MARKER_RE = /\b(respond[- ]?by|reply[- ]?by|offer[- ]?(?:exp(?:iry|ires)?)?|window|by|due)\s+(\d{4}-\d{2}-\d{2})\b/i;
 
@@ -47,7 +49,7 @@ function iso(ms) { return new Date(ms).toISOString().slice(0, 10); }
 
 // ── tracker deadline scan (Applied / Responded / Interview / Offer only) ─────
 function scanTrackerDeadlines() {
-  const appsFile = resolveTrackerPath(__dir);
+  const appsFile = resolveTrackerPath(CAREER_OPS);
   if (!existsSync(appsFile)) return [];
   const lines = readFileSync(appsFile, 'utf8').split('\n');
   const colmap = resolveColumns(lines);
@@ -70,7 +72,7 @@ function scanTrackerDeadlines() {
 
 // ── follow-ups table rows (next follow-up dates) ─────────────────────────────
 function scanFollowupDates() {
-  const fp = join(__dir, 'data', 'follow-ups.md');
+  const fp = join(CAREER_OPS, 'data', 'follow-ups.md');
   if (!existsSync(fp)) return [];
   const lines = readFileSync(fp, 'utf8').split('\n');
   const out = [];

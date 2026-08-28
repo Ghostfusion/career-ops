@@ -25,8 +25,10 @@ import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 const args = process.argv.slice(2);
 
 function run(script, flags = []) {
@@ -39,7 +41,7 @@ function runJson(script, flags = []) {
 }
 
 function proofStatus() {
-  const p = join(__dir, 'data', 'proof-points.tsv');
+  const p = join(CAREER_OPS, 'data', 'proof-points.tsv');
   if (!existsSync(p)) return { unPub: 0, pub: 0 };
   const lines = readFileSync(p, 'utf8').split('\n').filter(Boolean).slice(1);
   let unPub = 0, pub = 0;
