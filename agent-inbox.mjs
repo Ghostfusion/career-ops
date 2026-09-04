@@ -208,22 +208,27 @@ function list() {
 async function resolve() {
   const n = Number(process.argv[3]);
   if (!Number.isInteger(n) || n < 1) fail('resolve needs a 1-based item number (see `list`)');
-  const result = oneLine(opt('result'));
-  // Same lock discipline as add(): resolve is a read-modify-write over the
-  // whole file, and an unlocked rewrite can silently drop an item another
-  // writer appended between our read and write.
-  await withPipelineLock(PATH, () => {
-    // Number against the pending view, so `list` then `resolve N` line up.
+  const outcome = await withPipelineLock(PATH, () => {
+    // The pending snapshot, line lookup, and rewrite are one transaction. An
+    // add between the old read and write was acknowledged, then overwritten by
+    // this stale snapshot even though add itself correctly held this same lock.
+    // Number inside the critical section too, so the selected item and the
+    // rewritten line always come from one locked view.
     const pending = parseItems().filter((it) => !it.done);
     const target = pending[n - 1];
-    if (!target) fail(`no pending item #${n} (${pending.length} pending)`);
+    if (!target) return { error: `no pending item #${n} (${pending.length} pending)` };
+    const result = oneLine(opt('result'));
     const lines = readFileSync(PATH, 'utf8').split('\n');
     let updated = lines[target.line].replace('[ ]', '[x]');
     if (result && !/→ result:/.test(updated)) updated += ` → result: ${result}`;
     lines[target.line] = updated;
     writeFileSync(PATH, lines.join('\n'));
-    process.stdout.write(`Resolved #${n}: ${target.text}\n`);
+    return { target };
   }, { timeoutMs: 30_000 });
+  // Fail only after withPipelineLock has released. process.exit() inside the
+  // callback would bypass the lock's finally block and strand the directory.
+  if (outcome.error) fail(outcome.error);
+  process.stdout.write(`Resolved #${n}: ${outcome.target.text}\n`);
 }
 
 function fail(msg) {
@@ -234,7 +239,7 @@ function fail(msg) {
 const cmd = process.argv[2];
 if (cmd === 'add') await add();
 else if (cmd === 'list') list();
-else if (cmd === 'resolve') resolve();
+else if (cmd === 'resolve') await resolve();
 else {
   process.stdout.write(
     'Usage:\n' +
