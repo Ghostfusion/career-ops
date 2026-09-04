@@ -20,7 +20,7 @@
  * Run: node career-ops/verify-pipeline.mjs
  */
 
-import { readFileSync, readdirSync, existsSync, mkdirSync, unlinkSync, statSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
@@ -30,6 +30,7 @@ import {
 } from './tracker-parse.mjs';
 import { checkTrackerSync } from './tracker-sync-check.mjs';
 import { checkFollowupsSchema } from './stats.mjs';
+import { gcStaleReportReservations, isReportFileName } from './reserve-report-num.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
@@ -114,7 +115,11 @@ for (const line of lines) {
     score: parts[COLMAP.score],
     status: parts[COLMAP.status],
     pdf: parts[COLMAP.pdf],
-    report: parts[COLMAP.report],
+    // Null-safe, mirroring merge-tracker's parseAppLine: a tracker without a
+    // dedicated Report column leaves the key off COLMAP and keeps its links in
+    // Notes. Reading parts[undefined] would land on the wrong cell and flag
+    // every such row as a broken/orphan report.
+    report: COLMAP.report != null ? (parts[COLMAP.report] ?? '') : '',
     notes: COLMAP.notes != null ? (parts[COLMAP.notes] || '') : '',
   });
 }
@@ -230,26 +235,24 @@ if (boldScores === 0) ok('No bold in scores');
 
 // --- Check 8: Stale report-number sentinels (GC) ---
 // reserve-report-num.mjs drops NNN-RESERVED.md files in reports/ when a
-// number is claimed.  If the process crashed before writing the real report
-// and deleting the sentinel it will linger.  Sentinels older than 4 h are
-// stale; remove them here so they don't skew the next slot allocation.
-const SENTINEL_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+// number is claimed. If the process crashed before writing the real report
+// and deleting the sentinel it will linger. Delegate to the allocator's own
+// GC (gcStaleReportReservations), which applies the same 4h age rule AND two
+// guards this inline copy lacked: an owner PID that is still alive keeps its
+// sentinel no matter its age (a long-running evaluator must not lose its
+// claim mid-flight), and the whole sweep runs under the same tracker lock
+// the allocator uses — a verification run must never delete a sentinel at
+// the instant a concurrent reserve is counting occupancy.
 let staleSentinels = 0;
 if (existsSync(REPORTS_DIR)) {
-  const now = Date.now();
-  for (const name of readdirSync(REPORTS_DIR)) {
-    if (!name.endsWith('-RESERVED.md')) continue;
-    const full = join(REPORTS_DIR, name);
-    try {
-      const { mtimeMs } = statSync(full);
-      if (now - mtimeMs > SENTINEL_MAX_AGE_MS) {
-        unlinkSync(full);
-        warn(`Removed stale reservation sentinel: ${name}`);
-        staleSentinels++;
-      }
-    } catch {
-      // Already gone between readdir and stat — fine.
+  try {
+    const removed = await gcStaleReportReservations({ reportsDir: REPORTS_DIR, trackerPath: APPS_FILE });
+    if (removed > 0) {
+      warn(`Removed ${removed} stale reservation sentinel(s)`);
+      staleSentinels = removed;
     }
+  } catch (err) {
+    warn(`Sentinel GC skipped (${err.message}) — stale sentinels may skew the next slot allocation`);
   }
 }
 if (staleSentinels === 0) ok('No stale reservation sentinels');
@@ -259,7 +262,10 @@ if (staleSentinels === 0) ok('No stale reservation sentinels');
 // merge-tracker dedups the TRACKER, but nothing watched reports/ itself.
 // Warning-level, not error: duplicates can be legitimate (re-evaluation
 // after a JD change).
-const REPORT_FILE_RE = /^(\d+)-(.+)-\d{4}-\d{2}-\d{2}\.md$/;
+// Report-file identity derives from reserve-report-num.mjs's shared
+// occupiedReportNumber()/isReportFileName() rule — undated report files
+// (NNN-taken.md, NNN-slug-sample.md) are no longer invisible to Checks 9
+// and 10, so the checker and the allocator cannot disagree on what a report is.
 // Shares normalizeTextKey with Check 2 so the two checks fold text the same
 // way (#2393). That is where the guarantee ends: this check keys off the
 // FILENAME slug, already ASCII by the time a report is written, while Check 2
@@ -290,13 +296,16 @@ function extractRole(reportContent) {
 }
 
 const reportFiles = existsSync(REPORTS_DIR)
-  ? readdirSync(REPORTS_DIR).filter(f => REPORT_FILE_RE.test(f))
+  ? readdirSync(REPORTS_DIR).filter(f => isReportFileName(f))
   : [];
 
 let dupReports = 0;
 const reportsByRole = new Map();
 for (const name of reportFiles) {
-  const companySlug = name.match(REPORT_FILE_RE)[2];
+  // Dated `NNN-slug-YYYY-MM-DD.md` strips its trailing date so re-evaluations
+  // of one role group together; undated report files use the whole stem.
+  const dated = name.match(/^(\d+)-(.+)-\d{4}-\d{2}-\d{2}\.md$/);
+  const companySlug = dated ? dated[2] : name.replace(/^\d+-/, '').replace(/\.md$/i, '');
   let role = null;
   try {
     role = extractRole(readFileSync(join(REPORTS_DIR, name), 'utf-8'));
@@ -337,8 +346,14 @@ if (dupReports === 0) ok('No duplicate reports for the same company+role');
 // in the cell false-positives as an orphan.
 const referencedNums = new Set();
 for (const e of entries) {
-  const linkTexts = [...e.report.matchAll(/\[(\d+)\]/g)];
-  const linkTargets = [...e.report.matchAll(/\]\(([^)]+)\)/g)];
+  // Report links can live in the Report cell OR the Notes cell — merge-tracker
+  // keeps the link in Notes on trackers with no dedicated Report column
+  // (see buildRow's "Report:" notes re-housing), but this check used to read
+  // only e.report, so every such row was reported as an orphan. Scan both;
+  // a row that carries no link at all still falls back to its own number.
+  const reportAndNotes = `${e.report} ${e.notes}`;
+  const linkTexts = [...reportAndNotes.matchAll(/\[(\d+)\]/g)];
+  const linkTargets = [...reportAndNotes.matchAll(/\]\(([^)]+)\)/g)];
   if (linkTexts.length === 0 && linkTargets.length === 0) {
     referencedNums.add(e.num);
     continue;
@@ -352,7 +367,7 @@ for (const e of entries) {
 
 let orphanReports = 0;
 for (const name of reportFiles) {
-  const num = parseInt(name.match(REPORT_FILE_RE)[1], 10);
+  const num = parseInt(name.match(/^(\d+)-/)[1], 10);
   if (!referencedNums.has(num)) {
     warn(`Orphan report — no tracker row references #${num}: reports/${name}`);
     orphanReports++;

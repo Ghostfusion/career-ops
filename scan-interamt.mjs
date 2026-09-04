@@ -289,8 +289,14 @@ async function main() {
         process.stdout.write(`${found.length} found\n`);
 
         for (const offer of found) {
+          // The location_filter must see only geography: modality + city. The
+          // deadline is appended for the pipeline display, but feeding it to
+          // matchesLocation made a `block` entry equal to a month name or the
+          // literal "Frist" spuriously reject a role (a deadline is not a
+          // geography).
           const location = [offer.modality, offer.city].filter(Boolean).join(' ')
             + (offer.deadline ? ` (Frist: ${offer.deadline})` : '');
+          const filterLocation = [offer.modality, offer.city].filter(Boolean).join(' ');
           const pubDate = parseDE(offer.publishedDate);
           const canonical = {
             url: offer.url,
@@ -302,7 +308,7 @@ async function main() {
           };
 
           if (!matchesTitle(offer.title)) { seen.add(canonical.url); titleSkipped.push(canonical); continue; }
-          if (!matchesLocation(location)) { seen.add(canonical.url); locationSkipped.push(canonical); continue; }
+          if (!matchesLocation(filterLocation)) { seen.add(canonical.url); locationSkipped.push(canonical); continue; }
           // Same-day offers pass: lastScanDate is the day of the last run, and an
           // offer published later that same day should not be treated as stale.
           if (lastScanDate && pubDate && pubDate < lastScanDate) { seen.add(canonical.url); dateSkipped.push(canonical); continue; }

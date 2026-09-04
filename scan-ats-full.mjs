@@ -282,7 +282,21 @@ function parseArgs(argv) {
     process.exit(1);
   }
   const sinceDays = sinceArg.days ?? 3;
-  const limit = Number(valueOf('--limit')) || Infinity;
+  // `--limit` had no operand validation like `--since` does: `--limit 0` and
+  // `--limit abc` became Infinity (a full sweep the user believed was capped),
+  // and `--limit -5` became a truthy -5 — sampleCompanies(-5) silently drops
+  // the LAST 5 companies while opts.limit < list.length misreports the run as
+  // capped. Same rule scan.mjs's parseSinceDays applies: validate, then use.
+  const limitRaw = valueOf('--limit');
+  let limit = Infinity;
+  if (limitRaw !== null) {
+    const parsedLimit = Number(limitRaw);
+    if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+      console.error(`Error: --limit must be a positive integer (got ${JSON.stringify(limitRaw)})`);
+      process.exit(1);
+    }
+    limit = parsedLimit;
+  }
   const atsArg = valueOf('--ats');
   // --seeds: optional comma-separated VC portfolio sources (e.g. yc,a16z).
   // When set, the seed companies are fetched and probed via the ATS providers

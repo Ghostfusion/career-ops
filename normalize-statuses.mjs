@@ -64,10 +64,17 @@ function normalizeStatus(raw) {
   // form this comment claims to handle, that states.yml lists as an alias, and that
   // the header of this file names. A bare "Rechazado" fell through to unknown.
   if (/^rechazad[oa]$/i.test(s)) return { status: 'Rejected' };
-  if (/^rechazado\s+\d{4}/i.test(s)) return { status: 'Rejected' };
+  // A date-bearing Rechazado/Rechazada must not lose the transition date:
+  // set-status.mjs writes the row's prior status VERBATIM into status-log.tsv
+  // and funnel-velocity.mjs resolveCanonicalState's every `from` cell — a
+  // "Rechazado 2026-08-01" stripped here round-trips as an unknown from-state
+  // and the row's first transition vanishes from velocity/every-reached-X.
+  // Preserve the raw status (date included) in Notes, like DUPLICADO/repost.
+  if (/^rechazad[oa]\s+\d{4}/i.test(s)) return { status: 'Rejected', moveToNotes: raw.trim() };
 
-  // Aplicado with date → Applied (strip date)
-  if (/^aplicado\s+\d{4}/i.test(s)) return { status: 'Applied' };
+  // Aplicado/Aplicada with date → Applied. Same status-log round-trip concern
+  // as Rechazado above: keep the raw status in Notes so the date survives.
+  if (/^aplicad[oa]\s+\d{4}/i.test(s)) return { status: 'Applied', moveToNotes: raw.trim() };
 
   // CONDICIONAL / HOLD / EVALUAR / Verificar → Evaluated
   if (/^(condicional|hold|evaluar|verificar)$/i.test(s)) return { status: 'Evaluated' };
@@ -91,6 +98,19 @@ function normalizeStatus(raw) {
   ];
   for (const c of canonical) {
     if (lower === c.toLowerCase()) return { status: c };
+    // Hand-edited rows sometimes append the transition date to an English
+    // canonical status ("Applied 2026-08-01", "Rejected 2026-08-01").
+    // Rechazado/Aplicado above strip their Spanish date variants; without
+    // the English twin, those rows were reported as UNKNOWN by this tool
+    // while verify-pipeline/dedup-tracker (which strip trailing dates
+    // themselves) treated them as canonical — tools disagreeing about the
+    // same row.
+    if (lower.startsWith(`${c.toLowerCase()} `) && /\d{4}-\d{2}-\d{2}$/.test(lower)) {
+      // Preserve the raw status (date included) in Notes so the transition
+      // date survives the normalization — same status-log concern as the
+      // Rechazado/Aplicado branches above.
+      return { status: c, moveToNotes: raw.trim() };
+    }
   }
 
   // Every remaining alias comes from templates/states.yml, not a list here.

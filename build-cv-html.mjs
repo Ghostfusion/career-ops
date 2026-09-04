@@ -590,8 +590,16 @@ function buildContactRow(candidate) {
   if (c.email) {
     items.push(`<a href="${sanitizeUrl('mailto:' + c.email)}">${escapeHtml(c.email)}</a>`);
   }
+  // The linkedin and portfolio branches had the same scheme-rejection gap the
+  // github branch below fixed: sanitizeUrl('javascript:…') returns '' (and
+  // dropSchemes in sanitize-image-src-like guards make the href empty), yet
+  // the <a> was still pushed — an empty href with the label retained. Drop the
+  // item whenever the sanitized href comes back empty, exactly like github.
   if (c.linkedin && c.linkedin.url) {
-    items.push(`<a href="${sanitizeUrl(c.linkedin.url)}">${escapeHtml(c.linkedin.display || c.linkedin.url)}</a>`);
+    const linkedinHref = sanitizeUrl(c.linkedin.url);
+    if (linkedinHref) {
+      items.push(`<a href="${linkedinHref}">${escapeHtml(c.linkedin.display || c.linkedin.url)}</a>`);
+    }
   }
   if (c.github && c.github.url) {
     const githubHref = sanitizeUrl(c.github.url);
@@ -600,7 +608,10 @@ function buildContactRow(candidate) {
     }
   }
   if (c.portfolio && c.portfolio.url) {
-    items.push(`<a href="${sanitizeUrl(c.portfolio.url)}">${escapeHtml(c.portfolio.display || c.portfolio.url)}</a>`);
+    const portfolioHref = sanitizeUrl(c.portfolio.url);
+    if (portfolioHref) {
+      items.push(`<a href="${portfolioHref}">${escapeHtml(c.portfolio.display || c.portfolio.url)}</a>`);
+    }
   }
   if (c.location) {
     items.push(`<span>${escapeHtml(c.location)}</span>`);

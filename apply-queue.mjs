@@ -37,6 +37,20 @@ function writeQueue(q) {
   try { mkdirSync(dirname(queuePath), { recursive: true }); const tmp = `${queuePath}.tmp${process.pid}`; writeFileSync(tmp, JSON.stringify({ queue: q, updated: new Date().toISOString() }, null, 2)); renameSync(tmp, queuePath); return true; } catch { return false; }
 }
 
+// Validate a flag that consumes the next argv token as a row number
+// (--detail/--draft/--complete). A missing or non-numeric operand is a usage
+// error, not a "row not found" — exiting 2 for the former made a human type
+// `--complete` bare and read it as "no such row" instead of "you forgot N".
+function rowOperand(flag) {
+  const idx = args.indexOf(flag);
+  const raw = args[idx + 1];
+  if (raw === undefined || !/^\d+$/.test(raw)) {
+    console.error(`usage: ${flag} <row#>`);
+    process.exit(1);
+  }
+  return parseInt(raw, 10);
+}
+
 // call launchpad --json and parse (zero-LLM; same source the mode reads)
 function launchpadRows() {
   try {
@@ -65,11 +79,11 @@ const active = rows.filter((r) => r.tier === 'ACT' || r.tier === 'PREP');
 // --detail: show the prep gating one row (the blockers, next action, comp)
 const dei = args.indexOf('--detail');
 if (dei !== -1) {
-  const num = parseInt(args[dei + 1], 10);
+  const num = rowOperand('--detail');
   const t = active.find((r) => r.num === num);
   if (!t) { console.error(`no ACTIVE row #${num}`); process.exit(2); }
   console.log(`Detail for #${num} ${t.company} · ${t.role} (${t.tier})`);
-  console.log(`  score:      ${t.score}/5`);
+  console.log(`  score:      ${t.score == null ? '—' : `${t.score}/5`}`);
   console.log(`  blocker:    ${t.blocker ?? 'none'}`);
   console.log(`  comp:       ${t.comp ?? 'n/a'}`);
   console.log(`  next action: ${t.nextAction ?? '(none)'}`);
@@ -82,8 +96,7 @@ if (args.includes('--json')) { console.log(JSON.stringify({ count: active.length
 // --complete: only with explicit user action already done
 const ci = args.indexOf('--complete');
 if (ci !== -1) {
-  const num = parseInt(args[ci + 1], 10);
-  if (!num || isNaN(num)) { console.error('usage: --complete <row#>'); process.exit(2); }
+  const num = rowOperand('--complete');
   const target = active.find((r) => r.num === num);
   if (!target) { console.error(`row #${num} is not an ACTIVE (ACT/PREP) launchpad row`); process.exit(2); }
   // Only the user actually applies; we just record it.
@@ -100,7 +113,7 @@ if (ci !== -1) {
 // --draft: show the chain (draft-only, never sends)
 const di = args.indexOf('--draft');
 if (di !== -1) {
-  const num = parseInt(args[di + 1], 10);
+  const num = rowOperand('--draft');
   const t = active.find((r) => r.num === num);
   if (!t) { console.error(`no ACTIVE row #${num}`); process.exit(2); }
   console.log(`Apply chain for #${num} ${t.company} · ${t.role} (${t.tier})`);
@@ -116,7 +129,7 @@ if (di !== -1) {
 if (active.length === 0) { console.log('no ACTIVE launchpad rows — run launchpad first'); process.exit(0); }
 console.log(`apply queue — ${active.length} row(s) ready to act (of ${rows.length} open evaluated)`);
 for (const r of active) {
-  console.log(`  #${r.num} ${r.company} · ${r.role} · ${r.tier} · ${r.score}/5${r.blocker ? `  [${r.blocker}]` : ''}`);
+  console.log(`  #${r.num} ${r.company} · ${r.role} · ${r.tier} · ${r.score == null ? '—' : `${r.score}/5`}${r.blocker ? `  [${r.blocker}]` : ''}`);
   if (r.nextAction) console.log(`       ↳ ${r.nextAction.slice(0, 100)}`);
 }
 console.log('\nFor one row: node apply-queue.mjs --draft <row#> · to record a done apply: --complete <row#>');

@@ -47,9 +47,22 @@ async function main() {
   // --throttle or --throttle=<ms>: wait base..2*base ms (jittered) between checks
   // to stay under rate-based WAF limits. pracuj.pl's Cloudflare flags the session
   // after ~2 rapid hits, so a bulk run needs spacing. Default base 5000ms.
-  const throttleArg = args.find((a) => a === '--throttle' || a.startsWith('--throttle='));
-  const throttleBaseMs = throttleArg ? (Number(throttleArg.split('=')[1]) || 5000) : 0;
-  const positional = args.filter((a) => a !== '--no-fallback' && a !== throttleArg);
+  // The space-separated `--throttle 5000` form is rejected (usage says
+  // --throttle[=ms]): leaving "5000" in positional would silently check it as
+  // a URL. Every --throttle token is removed, whichever spelling it uses, so a
+  // repeated flag can't leak its operand into the URL list either.
+  const throttleArgs = args.filter((a) => a === '--throttle' || a.startsWith('--throttle='));
+  if (args.includes('--throttle')) {
+    const idx = args.indexOf('--throttle');
+    const next = args[idx + 1];
+    if (next !== undefined && !next.startsWith('--')) {
+      console.error('Error: --throttle takes its value as --throttle=<ms>, not a separate argument');
+      process.exitCode = 1;
+      return;
+    }
+  }
+  const throttleBaseMs = throttleArgs.length ? (Number(throttleArgs[0].split('=')[1]) || 5000) : 0;
+  const positional = args.filter((a) => a !== '--no-fallback' && !throttleArgs.includes(a));
 
   if (positional.length === 0) {
     console.error(USAGE);
@@ -59,6 +72,11 @@ async function main() {
 
   let urls;
   if (positional[0] === '--file') {
+    if (!positional[1]) {
+      console.error('Error: --file requires a filename argument');
+      process.exitCode = 1;
+      return;
+    }
     const text = await readFile(positional[1], 'utf-8');
     urls = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
   } else {

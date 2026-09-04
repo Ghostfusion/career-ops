@@ -55,8 +55,33 @@ function resolveReport(num) {
 }
 function parseCompBand(s) {
   if (!s) return null;
-  const cleaned = String(s).replace(/[$€£/,]/g, '');
-  const nums = (cleaned.match(/\d+(?:\.\d+)?\s*[kK]?/g) || []).map((x) => { const t = x.trim(); return /k$/i.test(t) ? parseFloat(t.replace(/\s/g, '')) * 1000 : parseFloat(t); }).filter((n) => Number.isFinite(n) && n >= 10000);
+  // The naive `\d+` extraction used to treat "35.000" (Spain/Germany/Italy:
+  // period = thousands) as 35 — below the n>=10000 floor, so the comp was
+  // silently dropped and the row ranked with a neutral default. Mirror
+  // salary-gap.mjs's separator canonicalization (#3174): when both separators
+  // appear the LAST one is decimal, a lone separator is grouping iff exactly
+  // three digits follow it, and only then is it removed. Unchanged behaviour
+  // `k`-suffixed values are matched WITH their suffix and multiplied by 1000
+  // below — never stripped first (the original parser's contract).
+  const cleaned = String(s).replace(/[$€£\u20AC]/g, '');
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  let numStr = cleaned;
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimal = lastComma > lastDot ? ',' : '.';
+    const grouping = decimal === ',' ? '.' : ',';
+    numStr = cleaned.split(grouping).join('').replace(decimal, '.');
+  } else {
+    const sep = lastComma !== -1 ? ',' : lastDot !== -1 ? '.' : null;
+    if (sep !== null) {
+      const grouped = new RegExp(`(\\d)\\${sep}(?=\\d{3}(?!\\d))`, 'g');
+      numStr = cleaned.replace(grouped, '$1').replace(sep, '.');
+    }
+  }
+  const nums = (numStr.match(/\d+(?:\.\d+)?\s*[kK]?/g) || []).map((t) => {
+    const x = t.trim();
+    return /k$/i.test(x) ? parseFloat(x) * 1000 : parseFloat(x);
+  }).filter((n) => Number.isFinite(n) && n >= 10000);
   return nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length) : null;
 }
 
@@ -75,6 +100,10 @@ if (args.includes('--self-test')) {
     ['no blocker → 1', clearProb(null) === 1],
     ['parse comp band', parseCompBand('$150,000-$200,000') === 175000],
     ['no band → null', parseCompBand('') === null],
+    ['plain range', parseCompBand('80k-90k') === 85000],
+    ['period-grouped', parseCompBand('€35.000 - €45.000') === 40000],
+    ['comma decimal', parseCompBand('€45.000,00') === 45000],
+    ['us decimal', parseCompBand('$123,684.50') === 123684.5],
   ];
   let n = 0;
   for (const [name, ok] of checks) { console.log(`  ${ok ? '✅' : '❌'} ${name}`); if (ok) n++; }

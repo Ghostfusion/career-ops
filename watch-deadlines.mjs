@@ -79,12 +79,17 @@ function scanFollowupDates() {
   for (const line of lines) {
     if (!line.startsWith('|')) continue;
     const p = line.split('|').map((s) => s.trim());
-    const num = parseInt(p[1], 10);
+    // Column 2 is the FOLLOW-UP's own row id; column 3 is the application
+    // number the follow-up belongs to (appNum) — the number every other
+    // consumer keys on. Reporting the row id instead of the application
+    // number made the CLI show a # that cannot be matched back to a tracker
+    // row (apply-queue --complete, set-status, invite-match all key on appNum).
+    const appNum = parseInt(p[2], 10);
     const date = p[3];
-    if (isNaN(num) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if (isNaN(appNum) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     const dateMs = parseDate(date);
     if (isNaN(dateMs)) continue;
-    out.push({ num, company: p[4] ?? '', role: p[5] ?? '', status: 'Follow-up', label: 'follow-up', date, dateMs });
+    out.push({ num: appNum, company: p[4] ?? '', role: p[5] ?? '', status: 'Follow-up', label: 'follow-up', date, dateMs });
   }
   return out;
 }
@@ -113,12 +118,26 @@ if (args.includes('--self-test')) {
   process.exit(n === checks.length ? 0 : 1);
 }
 
-const lookahead = parseInt((args[args.indexOf('--lookahead') + 1]) || '7', 10) || 7;
+const laIndex = args.indexOf('--lookahead');
+const lookaheadRaw = laIndex !== -1 ? args[laIndex + 1] : '7';
+if (laIndex !== -1 && (lookaheadRaw === undefined || lookaheadRaw.startsWith('--'))) {
+  console.error('Error: --lookahead requires a value (e.g. --lookahead 7)');
+  process.exit(1);
+}
+if (!/^\d+$/.test(lookaheadRaw)) {
+  console.error(`Invalid --lookahead value: ${JSON.stringify(lookaheadRaw)} (expected a positive integer)`);
+  process.exit(1);
+}
+const lookahead = parseInt(lookaheadRaw, 10);
+if (lookahead <= 0) {
+  console.error(`Invalid --lookahead value: ${JSON.stringify(lookaheadRaw)} (expected a positive integer)`);
+  process.exit(1);
+}
 const today = todayUTC();
-const rows = compute(today, lookahead);
+const rows = compute(today, lookahead).filter((r) => r.daysOut <= lookahead);
 
 if (args.includes('--json')) { console.log(JSON.stringify(rows, null, 2)); process.exit(0); }
-const urgent = rows.filter((r) => r.daysOut <= lookahead && r.dateMs >= today - DAY_MS * 30); // flag upcoming + recent-past
+const urgent = rows.filter((r) => r.dateMs >= today - DAY_MS * 30); // flag upcoming + recent-past
 if (urgent.length === 0) { console.log(`✓ no deadlines within ${lookahead}d`); process.exit(0); }
 console.log(`⏰ ${urgent.length} deadline(s) to watch:`);
 for (const r of urgent) {

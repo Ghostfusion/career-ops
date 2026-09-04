@@ -69,15 +69,38 @@ function trackerPathFor(options = {}) {
 // that are *entirely* a date. See tests/reserve-report-num.test.mjs.
 const BARE_DATE_FILE_RE = /^\d{4}-\d{2}-\d{2}\.md$/;
 
+/**
+ * The numeric-prefix rule that decides which reports/ files occupy a report
+ * number — shared by the allocator and health checks so they never disagree
+ * about what a report is. A bare date file (scan-ats-full digest) never
+ * counts; a `NNN-RESERVED.md` sentinel DOES count as occupancy (a mid-flight
+ * claim), but is not itself a report file — use isReportFileName() when
+ * enumerating real reports.
+ *
+ * @param {string} name - reports/ filename.
+ * @returns {number|null} The occupied report number, or null.
+ */
+export function occupiedReportNumber(name) {
+  const n = String(name);
+  if (BARE_DATE_FILE_RE.test(n)) return null;
+  const match = n.match(/^(\d+)-/);
+  if (!match) return null;
+  const num = parseInt(match[1], 10);
+  return Number.isInteger(num) && num > 0 ? num : null;
+}
+
+/** True when `name` is a real report file (numeric prefix, not a bare-date digest, not a reservation sentinel). */
+export function isReportFileName(name) {
+  if (/^\d+-RESERVED\.md$/i.test(name)) return false;
+  return occupiedReportNumber(name) !== null;
+}
+
 function occupiedFromReports(reportsDir) {
   const occupied = new Set();
   if (!existsSync(reportsDir)) return occupied;
   for (const name of readdirSync(reportsDir)) {
-    if (BARE_DATE_FILE_RE.test(name)) continue;
-    const match = name.match(/^(\d+)-/);
-    if (!match) continue;
-    const num = parseInt(match[1], 10);
-    if (Number.isInteger(num) && num > 0) occupied.add(num);
+    const num = occupiedReportNumber(name);
+    if (num !== null) occupied.add(num);
   }
   return occupied;
 }
