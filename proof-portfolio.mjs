@@ -31,7 +31,7 @@ const CAREER_OPS = getCareerOpsRoot();
 // ledger instead of only asserting shapes that hold for any input.
 function proofs(file = join(CAREER_OPS, 'data', 'proof-points.tsv')) {
   if (!existsSync(file)) return [];
-  return readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1)
+  return readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).slice(1)
     .map((l) => l.split('\t'))
     .filter((r) => r[0] && !r[0].startsWith('name'))
     .map((r) => ({ name: r[0], status: r[1] || '', url: r[2] || '', blocks: (r[3] || '').split('|').filter(Boolean) }));

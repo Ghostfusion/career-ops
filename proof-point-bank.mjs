@@ -41,7 +41,9 @@ const STATUSES = ['idea', 'building', 'published'];
 // ── ledger IO ────────────────────────────────────────────────────────────────
 function readLedger() {
   if (!existsSync(ledgerPath)) return [];
-  const lines = readFileSync(ledgerPath, 'utf8').split('\n').filter(Boolean);
+  // CRLF: a Windows-edited ledger otherwise leaves a trailing \r on the last
+  // field, so `updated` round-tripped as "2026-01-01\r" in --list json.
+  const lines = readFileSync(ledgerPath, 'utf8').split(/\r?\n/).filter(Boolean);
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     if (i === 0 && lines[i].startsWith('name\t')) continue; // header
