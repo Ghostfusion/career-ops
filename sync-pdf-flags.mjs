@@ -11,6 +11,10 @@
  *
  * Usage:
  *   node sync-pdf-flags.mjs [--dry-run] [--json]
+ *
+ * Exit codes: 0 ok · 1 usage/unknown option · 2 no PDF column in tracker.
+ *   2 also covers a missing/unreadable tracker or PDF manifest; 4 is a
+ *   tracker-lock timeout.
  */
 
 import { readFileSync, existsSync } from 'fs';

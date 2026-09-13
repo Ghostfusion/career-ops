@@ -68,6 +68,13 @@ const MAX_TOKENS            = 8192;
 const RATE_LIMIT_DELAY_MS   = 2500;  // pause between requests on free tier
 const MODEL_TIMEOUT_MS      = 15_000; // abort a single model call after 15 s
 
+// The evaluation report's score line as modes/oferta.md defines it:
+// `**Score:** {X/5}`. Bold may wrap the colon, so the `*` runs sit on both
+// sides of `Score:` — the unanchored "first number after the word" form this
+// used to be could also catch a Block score in the prose. Used by
+// parseReportScore (the tracker-addition writer) and the apply score gate.
+const REPORT_SCORE_LINE_RE = /^\s*\*?\*?\s*(?:score|puntuaci[oó]n)\s*:\s*\*?\*?\s*(\d+(?:\.\d+)?)\s*\/\s*5/im;
+
 // Provider priority order — models are sorted by provider prefix, not hardcoded names.
 // Add, remove, or reorder providers here; model names are resolved at runtime from the API.
 const PROVIDER_PRIORITY = [
@@ -663,6 +670,28 @@ async function cmdScan() {
 }
 
 // -- EVALUATE --
+
+/**
+ * The report's global score. Prefer the machine-summary block when the
+ * producer emits one (the *-eval.mjs family does); modes/oferta.md — the
+ * evaluation mode this runner feeds — emits no ---SCORE_SUMMARY--- block, so
+ * fall back to the `**Score:** {X/5}` line its report format defines. Both
+ * forms are line-anchored: an unanchored "first number after the word Score"
+ * match would pick up a Block score in the prose ("... scores 4.8/5 overall")
+ * and write the wrong value to the tracker. A NaN here blanks the Score cell,
+ * which launchpad then reads as below PREP (SKIP) instead of ACT/PREP.
+ *
+ * @param {string} text - Model output or report body.
+ * @returns {number} Score, or NaN when the text carries none.
+ */
+export function parseReportScore(text) {
+  const body = String(text ?? '');
+  const summaryBlock = body.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
+  const match = (summaryBlock && summaryBlock[1].match(/^\s*SCORE:\s*([0-9]+(?:\.[0-9]+)?)/mi))
+    || body.match(REPORT_SCORE_LINE_RE);
+  return match ? parseFloat(match[1]) : NaN;
+}
+
 async function cmdEvaluate(input, ctx) {
   tracker.recordZeroToken('scan');
   tracker.recordZeroToken('pdf payload');
@@ -733,13 +762,7 @@ async function cmdEvaluate(input, ctx) {
     const legitLine  = legitMatch ? `**Legitimacy:** ${legitMatch[1].trim()}` : '**Legitimacy:** unconfirmed';
     writeFile(relPath, `**URL:** ${input || '(pasted)'}\n${legitLine}\n\n${result}`);
 
-    // Parse SCORE strictly from the machine summary block, never the first
-    // "Score:" in the report prose (an unanchored match can pick up a Block
-    // score like "**Score:** 4.8/5" and write the wrong value to the tracker).
-    const summaryBlock = result.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
-    const scoreValue  = summaryBlock
-      ? (() => { const m = summaryBlock[1].match(/^\s*SCORE:\s*([0-9]+(?:\.[0-9]+)?)/mi); return m ? parseFloat(m[1]) : NaN; })()
-      : NaN;
+    const scoreValue  = parseReportScore(result);
     const scoreStr    = isFinite(scoreValue) ? `${scoreValue.toFixed(1)}/5` : '';
     const companyName = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const reportLink  = `[${numStr}](reports/${numStr}-${slug}-${today}.md)`;
@@ -821,7 +844,7 @@ async function cmdApply(ref, ctx) {
   if (!reportContent) { console.error('Could not read report content.'); return; }
 
   // Score-gate: warn and confirm before applying to low-fit roles (AGENTS.md Ethical Use)
-  const scoreMatch = reportContent.match(/^\s*\*?\*?\s*(?:score|puntuaci[oó]n)\s*:\s*\*?\*?\s*(\d+(?:\.\d+)?)\s*\/\s*5/im);
+  const scoreMatch = reportContent.match(REPORT_SCORE_LINE_RE);
   const scoreValue = scoreMatch ? parseFloat(scoreMatch[1]) : NaN;
   if (isFinite(scoreValue) && scoreValue < 4.0) {
     console.log(`\n⚠️  This report scored ${scoreValue.toFixed(1)}/5 — below the 4.0/5 threshold.`);

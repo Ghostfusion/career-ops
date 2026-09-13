@@ -21,7 +21,7 @@ import {
   statSync, unlinkSync, writeFileSync,
 } from 'fs';
 import { randomUUID } from 'crypto';
-import { dirname, join, resolve, basename } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import {
@@ -165,22 +165,12 @@ function releaseSlot(reportsDir, num, { token, force = false } = {}) {
   const sentinel = sentinelPath(reportsDir, num);
   try {
     if (!force && readSentinelOwner(sentinel)?.token !== token) return false;
-    // Guard against releasing a number that now owns a REAL report file
-    // (e.g. an administrative `--release` racing a worker that already wrote
-    // reports/042-acme-2026-08-15.md). Unlinking the sentinel would let the
-    // next reservation reuse 042 and collide with the existing report. The
-    // sentinel itself (`NNN-RESERVED.md`) matches the prefix pattern, so it is
-    // excluded explicitly — only a non-sentinel file with the number prefix
-    // (a real report) triggers the guard.
-    const reportPattern = new RegExp(`^${formatReportNumber(num)}-`);
-    const sentinelName = basename(sentinel);
-    for (const name of readdirSync(reportsDir)) {
-      if (reportPattern.test(name) && name !== sentinelName) {
-        if (!force) return false;
-        console.error(`⚠️  Refusing to release #${num}: a real report (${name}) exists for it.`);
-        return false;
-      }
-    }
+    // A number that already owns a real report file (reports/042-acme-….md) is
+    // still released: that file itself occupies 042 for the allocator
+    // (occupiedFromReports), so the next reservation cannot reuse it and there
+    // is no collision to guard against. Refusing here would instead break the
+    // documented flow — write the report, then `--release {###}` — and leak the
+    // sentinel.
     unlinkSync(sentinel);
     return true;
   } catch (err) {

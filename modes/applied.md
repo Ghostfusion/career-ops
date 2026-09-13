@@ -5,7 +5,7 @@ evaluation leaves open: turning evaluations into applications, watching the
 deadlines that follow, learning from rejections, warming the pipeline from
 LinkedIn alerts, and checking your target comp is realistically available.
 
-Seven standalone scripts back this mode; each has a dedicated purpose, none
+Six standalone scripts back this mode; each has a dedicated purpose, none
 touches the tracker directly, and all are wired into the routing menu.
 
 | Tool | What it does | Command |
@@ -20,9 +20,11 @@ touches the tracker directly, and all are wired into the routing menu.
 All of them follow the same contract as the rest of career-ops:
 - **They never submit, send, or write the tracker by hand.** Status transitions
   stay on `node set-status.mjs`.
-- **They read** tracker/reports/profile; only `ingest-linkedin` writes the
-  pipeline inbox (appending `- [ ] {url}` rows — the thing `pipeline` drains),
-  and `proof-point-bank` writes its own ledger + optional dismiss state.
+- **They read** tracker/reports/profile; only three write anything, and each
+  writes exactly one file: `ingest-linkedin` appends `- [ ] {url}` rows to
+  `data/pipeline.md` (the inbox `pipeline` drains), `proof-point-bank` owns the
+  `data/proof-points.tsv` ledger, and `launchpad` owns
+  `data/launchpad-state.json` (its `--dismiss`/`--reedit` state).
 - Zero LLM tokens — every number you see is computed from your own files.
 
 ---
@@ -40,8 +42,14 @@ node proof-point-bank.mjs --set "RAG eval harness" published --url https://githu
 node proof-point-bank.mjs --unblocks                → which launchpad rows (≥3.5) it unblocks
 ```
 
-The ledger is `data/proof-points.tsv` (user layer). When you mark a proof
-`published`, re-run launchpad — its blocked `PREP FIRST` rows should tip to ACT.
+The ledger is `data/proof-points.tsv` (user layer). `launchpad.mjs` never reads
+it — a row's tier comes from the tracker status/score, its report's
+`soft_gaps`/`next_action`/`hard_stops`, and `data/launchpad-state.json` — so
+publishing a proof moves no tier by itself, and `--unblocks` above is only the
+read-only preview of which rows reference its topic. To tip a blocked `PREP`
+row to ACT, re-evaluate that row now that the artifact exists (so its report's
+`soft_gaps`/`next_action` stop naming the missing proof), then re-run
+`node launchpad.mjs`.
 
 ## 2. `watch-deadlines` — don't drop the ball async
 

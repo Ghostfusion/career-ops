@@ -35,7 +35,7 @@ evaluator wrote; your job is to reason about *why* a row landed where it did).
 | Tier | Rule (script decision) | What YOU (agent) do |
 |------|------------------------|----------------------|
 | **🟢 ACT NOW** | Score ≥ 4.0, **no** structural or fixable blocker | Present the top row(s); offer to chain `cover` → `email` → `apply` |
-| **🟠 PREP FIRST** | Score ≥ 3.5 and a **fixable** blocker (portfolio/demo, comp-verification, CV/keyword ordering) | Name the exact blocker; propose the concrete 1-session prep (build+ publish a demo, verify comp, tailor summary). Once cleared by the user, re-run and it should move to ACT |
+| **🟠 PREP FIRST** | Score ≥ 3.5 and a **fixable** blocker (portfolio/demo, comp-verification, CV/keyword ordering) | Name the exact blocker; propose the concrete 1-session prep (build+ publish a demo, verify comp, tailor summary). The tier is a function of the report, not of the proof ledger: once cleared by the user, re-evaluate the row so its `soft_gaps`/`next_action` change, then re-run — only then does it move to ACT |
 | **🟡 HOLD** | Score ≥ 3.5 but a **structural** blocker (relocation, in-person mandate, visa, language, mandatory credential) | Keep open only if the blocker clears. Offer a `node set-status.mjs <row> SKIP` if the user confirms it never clears |
 | **⚫ SKIP** | Score < 3.5 | Recommend `SKIP` (canonical status) so the tracker reflects reality |
 | **filtered** | Score < prep, or a synthetic/fixture row, or dismissed | Hidden by the script — never surfaced |

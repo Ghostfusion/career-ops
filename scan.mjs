@@ -3443,8 +3443,13 @@ async function main() {
   // every run was logged as healthy forever and never reached the 🚨 streak
   // escalation. The TSV status vocabulary is additive: auth/server/unknown
   // join the existing reachable|slug_gone|network|empty.
+  // `recovered` entries (successful parser→API fallbacks) are never failures:
+  // keeping them out of this map leaves the company `reachable` in the health
+  // record, so computeConsecutiveFailures/`stats.mjs` cannot count a portal
+  // that scanned fine toward the 🚨 escalation, while the display line below
+  // still reports the fallback.
   const errorKindByCompany = new Map(
-    errors.filter((e) => e.kind).map((e) => [e.company, e.kind])
+    errors.filter((e) => e.kind && e.kind !== 'recovered').map((e) => [e.company, e.kind])
   );
   for (const t of targets) {
     const isEmpty = emptyTargets.includes(t.name);
