@@ -8,7 +8,9 @@
  *   2. negotiation-roi — verified, dollar-valuable achievements from the
  *      story-bank (only those that appear verbatim in cv.md — the script's
  *      antic-fabrication gate).
- *   3. salary-gap — where the offered figure sits vs desired/advertised.
+ *   3. salary-gap — the stated-comp trail for the row: the numbers already said
+ *      to interviewers (`--stated-for`). salary-gap has no per-row gap view, so
+ *      this section is that log, NOT the desired/advertised/actual gap.
  *
  * It is READ-ONLY and drafts nothing the user doesn't ask for. It prints a
  * negotiation briefing you can carry into a call.
@@ -22,7 +24,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
-import { getCareerOpsRoot } from './path-resolver.mjs';
+import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
@@ -31,6 +33,29 @@ const args = process.argv.slice(2);
 function run(script, flags = []) {
   try { return execFileSync('node', [join(__dir, script), ...flags], { encoding: 'utf8', maxBuffer: (1 << 22) }).trim(); }
   catch { return ''; }
+}
+// `run()` returns '' both when the child exits non-zero and when it legitimately
+// prints nothing, so `typeof run(...) === 'string'` can never fail — the old
+// "negotiation-roi resolves" check was true by construction. "Resolves" here
+// means the tool LOADS: a data-precondition failure (no story bank, no cv.md
+// yet) exits non-zero with the tool's own `Error: <path> not found…` line and
+// still counts (negotiation-roi prints "… not found." + "Run /career-ops
+// interview-prep …", or "… not found — this is a user-layer file …"), while
+// anything else that fails is a breakage: a missing module, a SyntaxError from
+// a rename that dropped an export, a top-level TypeError, ENOENT writing a
+// temp file. The previous catch returned true for all of those except
+// ERR_MODULE_NOT_FOUND, so a dependency that loaded and then crashed at startup
+// still printed "resolves". Anchored to `Error: ` so node's own
+// `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '…'` (no literal "not
+// found") is not mistaken for a precondition.
+const DATA_PRECONDITION_RE = /^Error: .*not found\b/m;
+function resolves(script, flags = []) {
+  try {
+    execFileSync('node', [join(__dir, script), ...flags], { encoding: 'utf8', maxBuffer: (1 << 22), stdio: ['ignore', 'pipe', 'pipe'] });
+    return true;
+  } catch (err) {
+    return DATA_PRECONDITION_RE.test(`${err.stderr || ''}${err.message || ''}`);
+  }
 }
 function runJson(script, flags = []) {
   const out = run(script, flags);
@@ -42,7 +67,11 @@ function roleForRow(num) {
   // We rely on salary-trend --json's per-family data being present; to map a
   // specific row to a family, we read the tracker + its report's role and use
   // salary-trend's grouping implicitly — a simple role-text match is enough.
-  const apps = join(CAREER_OPS, 'data', 'applications.md');
+  //
+  // resolveTrackerPath, not a hardcoded {root}/data/applications.md: it honours
+  // the documented CAREER_OPS_TRACKER override and the {root}/applications.md
+  // fallback every sibling tool uses, so a row that exists is found.
+  const apps = resolveTrackerPath(CAREER_OPS);
   if (!existsSync(apps)) return null;
   for (const line of readFileSync(apps, 'utf8').split('\n')) {
     if (!line.trim().startsWith('|')) continue;
@@ -56,7 +85,8 @@ function roleForRow(num) {
 if (args.includes('--self-test')) {
   const checks = [
     ['salary-trend resolves', runJson('salary-trend.mjs', ['--json']) !== null],
-    ['negotiation-roi resolves', typeof run('negotiation-roi.mjs', ['--summary']) === 'string'],
+    ['negotiation-roi resolves', resolves('negotiation-roi.mjs', ['--summary'])],
+    ['salary-gap resolves', resolves('salary-gap.mjs', ['--summary'])],
   ];
   let n = 0;
   for (const [name, ok] of checks) { console.log(`  ${ok ? '✅' : '❌'} ${name}`); if (ok) n++; }
@@ -70,9 +100,9 @@ const row = num ? roleForRow(num) : null;
 
 const tr = runJson('salary-trend.mjs', ['--json']);
 const roi = run('negotiation-roi.mjs', ['--summary']);
-const gap = num ? run('salary-gap.mjs', ['--stated-for', String(num)]) : run('salary-gap.mjs', ['--summary']);
+const statedTrail = num ? run('salary-gap.mjs', ['--stated-for', String(num)]) : run('salary-gap.mjs', ['--summary']);
 
-if (args.includes('--json')) { console.log(JSON.stringify({ row, market: tr, roiSummary: roi.trim(), gap: gap.trim() }, null, 2)); process.exit(0); }
+if (args.includes('--json')) { console.log(JSON.stringify({ row, market: tr, roiSummary: roi.trim(), statedTrail: statedTrail.trim() }, null, 2)); process.exit(0); }
 
 console.log(`Negotiation briefing${row ? ` — ${row.company} · ${row.role}` : ''}`);
 console.log('──────────────────────────────');
@@ -81,8 +111,8 @@ if (tr && tr.families) {
 }
 console.log('\nStory-bank ROI (verified against cv.md):');
 console.log(roi || '(no quantified claims yet — run negotiation-roi for detail)');
-console.log('\nComp gap:');
-console.log(gap || '(no comp data on this row yet)');
+console.log('\nStated-comp trail (what this row has already told interviewers):');
+console.log(statedTrail || '(nothing stated on this row yet)');
 console.log('──────────────────────────────');
 console.log('Negotiation notes: quote only claims that appear verbatim in cv.md;');
 console.log('anchor on market band + the verified ROI, never invented numbers.');

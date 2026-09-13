@@ -10,8 +10,10 @@
  * reports which launchpad rows each project, once published, would clear.
  *
  * It NEVER touches the tracker. Blockers are inferred by keyword-overlap with
- * launchpad rows' `next_action`/`soft_gaps`; clearing them is a launchpad
- * concern (the mode reclassifies when the user marks a project published).
+ * launchpad rows' `next_action`/`soft_gaps`, and --unblocks is a read-only
+ * preview: launchpad does not read this ledger, so publishing a proof reclassifies
+ * nothing by itself. Clearing a blocker means re-evaluating the row (so its
+ * report's `soft_gaps`/`next_action` change), then re-running launchpad.
  *
  * Usage:
  *   node proof-point-bank.mjs --list                 → ledger rows
@@ -31,7 +33,9 @@ import { resolveColumns, isSeparatorRow, isHeaderRow, extractTrackerReportNumber
 
 const CAREER_OPS = getCareerOpsRoot();
 const ledgerPath = join(CAREER_OPS, 'data', 'proof-points.tsv');
-const HEADER = `name\tstatus\turl\tblocks\tupdated\n`;
+// No trailing newline: writeLedger adds the separator before the first row, so
+// a trailing one here emitted a blank record the format does not define.
+const HEADER = 'name\tstatus\turl\tblocks\tupdated';
 const STATUSES = ['idea', 'building', 'published'];
 
 // ── ledger IO ────────────────────────────────────────────────────────────────
@@ -177,10 +181,13 @@ const si = args.indexOf('--set');
 if (si !== -1) {
   const name = args[si + 1]; const status = args[si + 2];
   if (!name || !status) { console.error('usage: --set <name> <status>'); process.exit(2); }
+  // Validate before touching the row: silently substituting the old status
+  // rewrote the ledger and reported success for a bogus argument.
+  if (!STATUSES.includes(status)) { console.error(`invalid status "${status}" — use idea|building|published`); process.exit(1); }
   const url = args.indexOf('--url') !== -1 ? (args[args.indexOf('--url') + 1] ?? '') : '';
   const row = rows.find((r) => r.name.toLowerCase() === name.toLowerCase());
   if (!row) { console.error(`no proof-point named "${name}"`); process.exit(2); }
-  row.status = STATUSES.includes(status) ? status : row.status;
+  row.status = status;
   if (url) row.url = url;
   row.updated = now();
   if (writeLedger(rows)) { console.log(`updated "${name}" → [${row.status}]${row.url ? ` ${row.url}` : ''}`); process.exit(0); }

@@ -22,8 +22,9 @@
  *   node apply-queue.mjs --self-test
  */
 import { fileURLToPath } from 'url';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, mkdtempSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
+import { tmpdir } from 'os';
 import { execFileSync } from 'child_process';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
@@ -51,29 +52,62 @@ function rowOperand(flag) {
   return parseInt(raw, 10);
 }
 
-// call launchpad --json and parse (zero-LLM; same source the mode reads)
-function launchpadRows() {
-  try {
-    const out = execFileSync('node', [LAUNCHPAD, '--json'], { encoding: 'utf8' });
-    return JSON.parse(out);
-  } catch { return []; }
+// call launchpad --json and parse (zero-LLM; same source the mode reads).
+// `trackerPath` lets the self-test point the child at its own probe tracker.
+function launchpadRows(trackerPath) {
+  const out = execFileSync('node', [LAUNCHPAD, '--json'], {
+    encoding: 'utf8',
+    env: trackerPath ? { ...process.env, CAREER_OPS_TRACKER: trackerPath } : process.env,
+  });
+  return JSON.parse(out);
 }
 
 const args = process.argv.slice(2);
 if (args.includes('--self-test')) {
-  // Real wiring test: launchpad --json must resolve to an array of rows with
-  // the fields apply-queue depends on (tier, num, company, role, blocker, nextAction).
+  // Wiring test against a probe tracker. The old version called launchpadRows()
+  // against whatever the user had configured and swallowed every failure into
+  // [], so it passed on a crashing launchpad (Array.isArray([]) is true and
+  // [].every(...) is vacuously true) — and the default view then read a broken
+  // tracker as an empty queue.
+  let rows = null;
+  let failure = '';
+  const probeRoot = mkdtempSync(join(tmpdir(), 'career-ops-applyqueue-'));
+  try {
+    mkdirSync(join(probeRoot, 'data'), { recursive: true });
+    writeFileSync(join(probeRoot, 'data', 'applications.md'), [
+      '# Applications Tracker',
+      '',
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+      '|---|---|---|---|---|---|---|---|---|',
+      '| 1 | 2026-01-05 | Acme | Staff Engineer | 4.6/5 | Evaluated | ❌ | [1](001-acme-2026-01-05.md) | n |',
+      '',
+    ].join('\n'));
+    rows = launchpadRows(join(probeRoot, 'data', 'applications.md'));
+  } catch (err) {
+    failure = String(err.stderr || err.message).trim().split('\n').filter(Boolean).pop() || 'no output';
+  } finally {
+    rmSync(probeRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
   const checks = [
-    ['launchpad resolves', Array.isArray(launchpadRows())],
-    ['row objects have tier field', launchpadRows().every((r) => typeof r.tier === 'string')],
+    ['launchpad --json resolves', rows !== null],
+    ['rows carry the tier/num contract apply-queue consumes',
+      Array.isArray(rows) && rows.every((r) => typeof r.tier === 'string' && Number.isInteger(r.num))],
   ];
   let n = 0;
   for (const [name, ok] of checks) { console.log(`  ${ok ? '✅' : '❌'} ${name}`); if (ok) n++; }
+  if (failure) console.error(`  launchpad said: ${failure}`);
   console.log(`\napply-queue ${n}/${checks.length} passed`);
   process.exit(n === checks.length ? 0 : 1);
 }
 
-const rows = launchpadRows();
+let rows = [];
+try {
+  rows = launchpadRows();
+} catch (err) {
+  console.error('launchpad --json failed — cannot read the ACT/PREP queue:');
+  console.error(String(err.stderr || err.message).trim());
+  process.exit(4);
+}
 const active = rows.filter((r) => r.tier === 'ACT' || r.tier === 'PREP');
 
 // --detail: show the prep gating one row (the blockers, next action, comp)
@@ -101,11 +135,19 @@ if (ci !== -1) {
   if (!target) { console.error(`row #${num} is not an ACTIVE (ACT/PREP) launchpad row`); process.exit(2); }
   // Only the user actually applies; we just record it.
   try {
-    execFileSync('node', [join(__dir, 'set-status.mjs'), String(num), 'Applied'], { encoding: 'utf8', stdio: 'ignore' });
+    // `--row` names the row space explicitly: a bare number is ambiguous in
+    // set-status whenever a row's Report cell links a different report number
+    // than its own — the normal case once the counters diverge — and set-status
+    // then exits 3 without touching the tracker, which surfaced here only as
+    // "Command failed" because stdio is 'ignore'.
+    execFileSync('node', [join(__dir, 'set-status.mjs'), '--row', String(num), 'Applied'], { encoding: 'utf8', stdio: 'ignore' });
     execFileSync('node', [join(__dir, 'followup-seed.mjs'), String(num)], { encoding: 'utf8', stdio: 'ignore' });
   } catch (e) { console.error('failed to mark Applied (set-status/followup-seed):', e.message); process.exit(4); }
   const q = readQueue(); const rec = { num, markedAt: new Date().toISOString(), prep: target.blocker ?? null };
-  writeQueue([...q.filter((x) => x.num !== num), rec]);
+  if (!writeQueue([...q.filter((x) => x.num !== num), rec])) {
+    console.error(`#${num} was marked Applied, but recording data/apply-queue.json failed`);
+    process.exit(4);
+  }
   console.log(`#${num} ${target.company} · ${target.role} marked Applied + follow-up seeded. (You did the apply — this just records it.)`);
   process.exit(0);
 }

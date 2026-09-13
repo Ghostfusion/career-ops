@@ -22,14 +22,12 @@
  *   node expected-value.mjs --json
  *   node expected-value.mjs --self-test
  */
-import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, readdirSync } from 'fs';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { resolveTrackerPath } from './tracker-utils.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow, extractTrackerReportNumbers } from './tracker-parse.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 
 function yamlOf(p) {
@@ -146,7 +144,10 @@ evs.sort((a, b) => b.ev - a.ev);
 const rowF = args.indexOf('--row');
 const only = rowF !== -1 ? parseInt(args[rowF + 1], 10) : null;
 const viewed = only ? evs.filter((r) => r.num === only) : evs;
-if (args.includes('--json')) { console.log(JSON.stringify(viewed.slice(0, only ? viewed.length : 15), null, 2)); process.exit(0); }
+// --json is a machine surface: it carries every ranked row. The 12-row cap
+// below belongs to the human view only — the old `slice(0, 15)` here silently
+// dropped rows 16+ from the payload the reader could not see.
+if (args.includes('--json')) { console.log(JSON.stringify(viewed, null, 2)); process.exit(0); }
 if (viewed.length === 0) { console.log('no open Evaluated rows'); process.exit(0); }
 
 console.log('expected-value — highest EV prep/work order (higher is better):');

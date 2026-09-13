@@ -14,7 +14,7 @@
  *   node close-loop.mjs <row#> --json      → proposal as JSON
  *   node close-loop.mjs --self-test
  *
- * Exit codes: 0 ok · 1 usage · 2 row not found/not rejected.
+ * Exit codes: 0 ok · 1 usage · 2 row not found.
  */
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -75,13 +75,16 @@ function proposeFor(row, yaml) {
     .concat((yaml.discard_reasons || []))
     .find((g) => !/relocat|in-person|sponsorship|fluency/i.test(g)) || notes;
   const target = chooseTarget(gap);
+  // One fallback, used in both fields: interpolating the raw gap rendered
+  // `address: ""` whenever the row had neither a report gap nor notes.
+  const gapText = gap || 'no explicit gap in report';
   return {
     row: row.num,
     company: row.company,
     role: row.role,
-    gap: gap || 'no explicit gap in report',
+    gap: gapText,
     target,
-    action: target === 'launchpad-prep' ? 'clear the prep task, then re-run launchpad' : `Edit ${target} to address: “${gap}”`,
+    action: target === 'launchpad-prep' ? 'clear the prep task, then re-run launchpad' : `Edit ${target} to address: “${gapText}”`,
   };
 }
 
@@ -122,7 +125,7 @@ if (!num || isNaN(num)) { console.error('Usage: node close-loop.mjs <row#> [--js
 const row = trackerRow(num);
 if (!row) { console.error(`no tracker row #${num}`); process.exit(2); }
   const status = String(row.status).trim();
-  if (status !== 'Rejected') console.log(`(row is ${status}, not Rejected — treating as preventive gap review)`);
+  if (status !== 'Rejected') console.error(`(row is ${status}, not Rejected — treating as preventive gap review)`);
 const reportNum = (extractTrackerReportNumbers(row.report, row.notes)[0]) ?? num;
 const rp = resolveReportPath(reportNum);
 const yaml = rp ? readReportYaml(rp) : {};

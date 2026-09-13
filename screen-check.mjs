@@ -23,6 +23,7 @@ import { dirname, join } from 'path';
 import { execFileSync } from 'child_process';
 import { resolveColumns, isSeparatorRow, isHeaderRow } from './tracker-parse.mjs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
+import { findCaptureForReport } from './jd-capture.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -58,18 +59,33 @@ function resolveReport(num) {
   } catch { return null; }
 }
 
-// Derive a candidate jds/ file from the report filename's leading company slug.
-function resolveJdPath(reportPath) {
+// Resolve the JD capture belonging to a row's report.
+//
+// Two naming conventions have to keep working: the canonical capture
+// (`{NNN}-…`, which findCaptureForReport resolves by report number) and the
+// `<company>-<role>.md` files jds/ holds in this checkout. The old version kept
+// only the FIRST token of the report's company slug and took the first jds/
+// entry that merely started with it, so with two postings from one company a row
+// was scored against another posting's requirements — and the numbers looked
+// real. Ambiguity now yields no hint instead of a guess.
+function resolveJdPath(reportPath, num) {
   if (!reportPath) return null;
   const file = reportPath.split(/[\\/]/).pop() || '';
-  const rest = file.replace(/^0*\d+-/, '');
-  const companyPart = rest.split('-')[0];
-  if (!companyPart) return null;
   const base = join(CAREER_OPS, 'jds');
   if (!existsSync(base)) return null;
   try {
-    const hit = readdirSync(base).find((f) => f.startsWith(companyPart + '-'));
-    return hit ? join(base, hit) : null;
+    const byNumber = findCaptureForReport(base, num);
+    if (byNumber) return byNumber.path;
+
+    const slug = file.replace(/^0*\d+-/, '').replace(/\.md$/i, '').replace(/-\d{4}-\d{2}-\d{2}$/, '');
+    if (!slug) return null;
+    // Only a JD whose filename starts with the report's FULL slug is this row's
+    // posting. Shortening the slug to its first token (what the old code did) is
+    // how a row got scored against another posting from the same company; several
+    // candidates therefore resolve to nothing rather than to a guess.
+    const prefix = `${slug}-`.toLowerCase();
+    const hits = readdirSync(base).filter((f) => /\.(md|markdown|txt|html?)$/i.test(f) && f.toLowerCase().startsWith(prefix));
+    return hits.length === 1 ? join(base, hits[0]) : null;
   } catch { return null; }
 }
 
@@ -92,7 +108,11 @@ function verdictFor(yaml) {
 function skillGapHint(jdPath) {
   if (!jdPath || !existsSync(jdPath)) return null;
   try {
-    const out = execFileSync('node', [join(__dir, 'jd-skill-gap.mjs'), jdPath, '--json'], { encoding: 'utf8', maxBuffer: (1 << 22) }).trim();
+    // cwd is pinned deliberately: jd-skill-gap.mjs reads `const CV_PATH = 'cv.md'`
+    // relative to its cwd, so an inherited cwd made the child fail with
+    // "cv.md not found" (or, worse, classify against an unrelated cv.md) outside
+    // the data root, and this catch then hid the whole documented hint.
+    const out = execFileSync('node', [join(__dir, 'jd-skill-gap.mjs'), jdPath, '--json'], { encoding: 'utf8', maxBuffer: (1 << 22), cwd: CAREER_OPS }).trim();
     const parsed = JSON.parse(out);
     if (parsed.lowConfidence) return { lowConfidence: parsed.lowConfidence.reason || 'unparsable JD' };
     return { existing: (parsed.existing || []).length, supported: (parsed.supportedByResume || []).length, gaps: (parsed.gap || []).length };
@@ -130,7 +150,7 @@ for (const line of lines) {
   const rp = resolveReport(num);
   const yaml = rp ? yamlOf(rp) : {};
   const v = verdictFor(yaml);
-  const jdPath = rp ? resolveJdPath(rp) : null;
+  const jdPath = rp ? resolveJdPath(rp, num) : null;
   const jdHint = jdPath ? skillGapHint(jdPath) : null;
   rows.push({ num, company: p[colmap.company] ?? '', role: p[colmap.role] ?? '', score: (p[colmap.score] ?? '').replace('/5', ''), reportPath: rp, outcome: v.outcome, reason: v.reason, hard: v.hard, jdSkillGap: jdHint });
 }

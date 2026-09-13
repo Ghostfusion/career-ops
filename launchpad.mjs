@@ -22,7 +22,7 @@
  *   node launchpad.mjs --reedit 8       → forget a dismissed row
  *   node launchpad.mjs --self-test      → run the built-in test harness
  *
- * Exit codes: 0 ok · 1 usage/parse error · 2 not-found/bad selector ·
+ * Exit codes: 0 ok · 1 self-test failure · 2 usage/parse or not-found/bad selector ·
  * 4 state-file write failure.
  */
 import { join, dirname } from 'path';
@@ -184,12 +184,22 @@ if (di !== -1) {
 const ri = args.indexOf('--reedit');
 if (ri !== -1) {
   const nums = args.slice(ri + 1).filter((a) => !a.startsWith('-')).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  // Same guard as --dismiss, and for a second reason: with no valid row the old
+  // code rewrote the state file unchanged and printed `un-dismissed ` with an
+  // empty list — a write with nothing to write.
+  if (nums.length === 0) { console.error('Usage: node launchpad.mjs --reedit <rowNums…>'); process.exit(2); }
   const merged = dismissed.filter((x) => !nums.includes(x));
   if (writeState(merged)) { console.log(`un-dismissed ${nums.join(', ')}`); process.exit(0); }
   console.error('failed to write launchpad-state.json'); process.exit(4);
 }
 
 const appsFile = resolveTrackerPath(CAREER_OPS);
+if (!existsSync(appsFile)) {
+  // Documented as exit 2 (not-found/bad selector); the unguarded readFileSync
+  // inside computeLaunchpad died with a raw ENOENT stack and exit 1 instead.
+  console.error(`no tracker found at ${appsFile}`);
+  process.exit(2);
+}
 const rows = computeLaunchpad(appsFile, dismissed);
 
 if (args.includes('--json')) { console.log(JSON.stringify(rows, null, 2)); process.exit(0); }

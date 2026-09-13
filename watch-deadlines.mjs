@@ -10,7 +10,7 @@
  * Date markers recognized in Notes (case-insensitive substring match):
  *   respond-by YYYY-MM-DD    recruiter reply deadline
  *   reply-by  YYYY-MM-DD    alias
- *   expires   YYYY-MM-DD    offer expiry
+ *   expires   YYYY-MM-DD    offer expiry (bare "expires", or "offer expires"/"expiry")
  *   window    YYYY-MM-DD    interview/offer window
  *   by        YYYY-MM-DD    generic deadline
  *   due       YYYY-MM-DD    generic deadline
@@ -20,7 +20,7 @@
  *   node watch-deadlines.mjs --json           → machine-readable
  *   node watch-deadlines.mjs --self-test      → built-in test harness
  *
- * Exit codes: 0 ok (incl. no deadlines) · 1 usage/parse · 2 write failure.
+ * Exit codes: 0 ok (incl. no deadlines) · 1 usage/parse or self-test failure.
  */
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -32,7 +32,9 @@ import { getCareerOpsRoot } from './path-resolver.mjs';
 const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 const DAY_MS = 86400000;
-const MARKER_RE = /\b(respond[- ]?by|reply[- ]?by|offer[- ]?(?:exp(?:iry|ires)?)?|window|by|due)\s+(\d{4}-\d{2}-\d{2})\b/i;
+// Global so a single Notes cell can carry more than one marker; matchAll
+// clones the regex, so the shared lastIndex can't leak between rows.
+const MARKER_RE = /\b(respond[- ]?by|reply[- ]?by|offer[- ]?(?:exp(?:iry|ires)?)?|exp(?:iry|ires)?|window|by|due)\s+(\d{4}-\d{2}-\d{2})\b/gi;
 
 function todayUTC() { const n = new Date(); return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()); }
 function msOf(y, m, d) { return Date.UTC(y, m - 1, d); }
@@ -61,11 +63,13 @@ function scanTrackerDeadlines() {
     const status = String(row.status).trim();
     if (!['Applied', 'Responded', 'Interview', 'Offer'].includes(status)) continue;
     const hay = `${row.notes} ${row.report}`;
-    const m = hay.match(MARKER_RE);
-    if (!m) continue;
-    const dateMs = parseDate(m[2]);
-    if (isNaN(dateMs)) continue;
-    out.push({ num: row.num, company: row.company, role: row.role, status, label: m[1].toLowerCase(), date: iso(dateMs), dateMs });
+    // match() returned only the first marker, so "reply-by X; offer expires Y"
+    // silently lost Y. Every dated marker in the cell is its own record.
+    for (const m of hay.matchAll(MARKER_RE)) {
+      const dateMs = parseDate(m[2]);
+      if (isNaN(dateMs)) continue;
+      out.push({ num: row.num, company: row.company, role: row.role, status, label: m[1].toLowerCase(), date: iso(dateMs), dateMs });
+    }
   }
   return out;
 }
@@ -137,7 +141,11 @@ const today = todayUTC();
 const rows = compute(today, lookahead).filter((r) => r.daysOut <= lookahead);
 
 if (args.includes('--json')) { console.log(JSON.stringify(rows, null, 2)); process.exit(0); }
-const urgent = rows.filter((r) => r.dateMs >= today - DAY_MS * 30); // flag upcoming + recent-past
+// No recency floor: the header promises "inside a lookahead window … or
+// already past", so a long-expired offer still shows (the "overdue Nd" tag
+// already conveys its age). The old 30-day floor hid it from the human view
+// while --json kept reporting it.
+const urgent = rows;
 if (urgent.length === 0) { console.log(`✓ no deadlines within ${lookahead}d`); process.exit(0); }
 console.log(`⏰ ${urgent.length} deadline(s) to watch:`);
 for (const r of urgent) {

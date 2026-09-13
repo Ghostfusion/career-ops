@@ -20,6 +20,8 @@
 import { join } from 'path';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+// The one amount parser for this field — see parseComp below.
+import { parseAmount } from './salary-gap.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
 
@@ -44,15 +46,19 @@ function readReportYaml(p) {
 }
 function strip(s) { return String(s).trim().replace(/^(["'])(.*)\1$/, '$2'); }
 
-// natural "$150,000-$200,000" / "$120,000" / "$120k-$140k" → [min,max] USD
+// natural "$150,000-$200,000" / "$120,000" / "$120k-$140k" / "80-90k EUR"
+// → [min,max] USD-or-not (no FX conversion; the tool only groups and spans)
+//
+// `advertised_comp` is the same field salary-gap.mjs parses (as an observation's
+// `amount`), so it has to be parsed the same way. A local strip-separators-then-
+// parse loop got the k-suffix and decimals wrong in opposite directions:
+// "80-90k EUR" → [90000,90000] (the un-suffixed 80 fell under its >=5000 noise
+// filter) and "82.5k" → 825000, "$123,684.50" → 12368450 — so two readers of one
+// field disagreed and every span/median/overlap count here was off. parseAmount
+// returns {min,max,mid}; map that onto the [min,max] shape used below.
 function parseComp(raw) {
-  const s0 = String(raw || '');
-  const s = s0.replace(/[$€£/,.]/g, '').replace(/\b(annually|per year|base|OTE|USD)\b/gi, '');
-  const nums = (s.match(/\d+(?:\.\d+)?\s*[kK]?/g) || [])
-    .map((x) => { const t = x.trim(); const n = parseFloat(t.replace(/\s/g, '')); return /k$/i.test(t) ? n * 1000 : n; })
-    .filter((n) => Number.isFinite(n) && n >= 5000); // ignore stray small numbers
-  if (nums.length === 0) return null;
-  return nums.length === 1 ? [nums[0], nums[0]] : [Math.min(...nums), Math.max(...nums)];
+  const amt = parseAmount(raw);
+  return amt ? [amt.min, amt.max] : null;
 }
 
 // role-family key (company-agnostic so it spans roles)
@@ -82,6 +88,10 @@ if (args.includes('--self-test')) {
     ['band', JSON.stringify(parseComp('$150,000-$200,000')) === '[150000,200000]'],
     ['single', JSON.stringify(parseComp('$120,000')) === '[120000,120000]'],
     ['k', JSON.stringify(parseComp('$120k-$140k')) === '[120000,140000]'],
+    // The schema's own documented shape: one k suffix covers BOTH bounds.
+    ['k range with currency suffix', JSON.stringify(parseComp('80-90k EUR')) === '[80000,90000]'],
+    ['decimal k', JSON.stringify(parseComp('82.5k')) === '[82500,82500]'],
+    ['cents', JSON.stringify(parseComp('$123,684.50')) === '[123684.5,123684.5]'],
     ['none', parseComp('competitive') === null],
     ['family swe', roleFamily('Senior Software Engineer, Applied AI (Senior or Staff)') === 'swe-ai'],
     ['family pm', roleFamily('Staff Product Manager, Agentic Experiences') === 'pm'],

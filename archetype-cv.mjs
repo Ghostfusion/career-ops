@@ -50,7 +50,11 @@ if (args.includes('--self-test')) {
   const checks = [
     ['reads archetypes', ar.length >= 4],
     ['reads cv summary', cvSummary().length > 10],
-    ['archetype has skills', Object.keys(KEY).length >= 4],
+    // Was `Object.keys(KEY).length >= 4` — the size of a literal, which can
+    // never fail. The fact that matters is whether everything the profile
+    // advertises has a calibrated sample; anything else silently renders the
+    // fallback (no headline, no surfaced skills).
+    ['archetypes have skills', ar.every((a) => (KEY[a]?.skills ?? []).length > 0)],
   ];
   let n = 0;
   for (const [name, ok] of checks) { console.log(`  ${ok ? '✅' : '❌'} ${name}`); if (ok) n++; }

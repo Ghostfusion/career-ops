@@ -19,6 +19,8 @@
  *
  * Usage:
  *   node story-bank-seed.mjs                    → write interview-prep/story-bank.md
+ *                                                 (refuses with exit 3 if one exists)
+ *   node story-bank-seed.mjs --force            → overwrite an existing bank
  *   node story-bank-seed.mjs --preview          → print, don't write
  *   node story-bank-seed.mjs --json             → structured, no write
  *   node story-bank-seed.mjs --self-test
@@ -164,6 +166,17 @@ if (args.includes('--preview')) { console.log(render(items).slice(0, 1600)); pro
 if (items.length === 0) { console.log('no Block F STAR rows found in reports/*.md'); process.exit(0); }
 
 if (!args.includes('--no-write')) {
+  // The rendered bank carries the banner "Edit freely — this is user layer",
+  // and a default re-run would destroy exactly that: the seed output is
+  // regenerable from reports/, the user's curation of it is not. Refuse to
+  // overwrite an existing bank unless --force says so.
+  if (existsSync(BANK) && !args.includes('--force')) {
+    console.error(`story-bank: ${BANK} already exists — refusing to overwrite your bank.`);
+    console.error('  node story-bank-seed.mjs --preview   see what a seed would write');
+    console.error('  node story-bank-seed.mjs --force     overwrite it (your edits are not recoverable)');
+    console.error('  or rename/back the file up first, then re-run.');
+    process.exit(3);
+  }
   try { mkdirSync(dirname(BANK), { recursive: true }); writeFileSync(BANK, render(items)); }
   catch { console.error('write failed'); process.exit(4); }
 }
