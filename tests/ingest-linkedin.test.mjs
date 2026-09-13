@@ -11,11 +11,15 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The same lock the other writers of data/pipeline.md take (scan.mjs's
+// appendToPipeline, plugins.mjs, rank-pipeline.mjs). Held here to make the
+// concurrent-write case below deterministic.
+import { withPipelineLock } from '../pipeline-lock.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SCRIPT = 'ingest-linkedin.mjs';
@@ -43,12 +47,15 @@ function fixture() {
   return { dataRoot, decoyCwd };
 }
 
+// The child always gets the fixture data root and a DIFFERENT cwd.
+const env = (dataRoot) => ({ ...process.env, CAREER_OPS_ROOT: dataRoot, CAREER_OPS_DATA_DIR: '' });
+
 function run(scriptArgs, { dataRoot, decoyCwd }) {
   const r = spawnSync(process.execPath, [join(ROOT, SCRIPT), ...scriptArgs], {
     cwd: decoyCwd,
     encoding: 'utf-8',
     timeout: 60_000,
-    env: { ...process.env, CAREER_OPS_ROOT: dataRoot, CAREER_OPS_DATA_DIR: '' },
+    env: env(dataRoot),
   });
   assert.equal(r.error, undefined, `spawn failed: ${r.error?.message}`);
   return { ...r, all: `${r.stdout ?? ''}${r.stderr ?? ''}` };
@@ -61,12 +68,12 @@ const cleanup = (f) => {
 const pipelineOf = (f) => readFileSync(join(f.dataRoot, 'data', 'pipeline.md'), 'utf8');
 const trackerOf = (f) => readFileSync(join(f.dataRoot, 'data', 'applications.md'), 'utf8');
 
-test('--self-test exits 0 with its own 4/4 verdict', () => {
+test('--self-test exits 0 with its own 7/7 verdict', () => {
   const f = fixture();
   try {
     const r = run(['--self-test'], f);
     assert.equal(r.status, 0, r.all);
-    assert.match(r.stdout, /ingest-linkedin self-test: 4\/4 passed/);
+    assert.match(r.stdout, /ingest-linkedin self-test: 7\/7 passed/);
   } finally { cleanup(f); }
 });
 
@@ -103,6 +110,107 @@ test('appends only links not already pending, into the data-root pipeline', () =
     );
     assert.deepEqual(readdirSync(f.decoyCwd), [], 'a script wrote into the directory it was launched from');
   } finally { cleanup(f); }
+});
+
+test('a URL that ends a sentence is written without the sentence punctuation', () => {
+  const f = fixture();
+  try {
+    const r = run(['--text', 'Apply at https://www.linkedin.com/jobs/view/4012345678.'], f);
+    assert.equal(r.status, 0, r.all);
+    const pipeline = pipelineOf(f);
+    assert.match(
+      pipeline,
+      /- \[ \] https:\/\/www\.linkedin\.com\/jobs\/view\/4012345678\n/,
+      `the trailing period was kept in the written URL:\n${pipeline}`,
+    );
+    assert.doesNotMatch(pipeline, /4012345678\./, 'a broken link (URL + punctuation) was written into the pipeline');
+  } finally { cleanup(f); }
+});
+
+test('--json strips trailing punctuation but keeps query strings and trailing slashes', () => {
+  const f = fixture();
+  try {
+    const text = 'x https://www.linkedin.com/jobs/view/1/?refId=abc&trk=xyz, y https://www.linkedin.com/jobs/view/2/. z';
+    const r = run(['--json', '--text', text], f);
+    assert.equal(r.status, 0, r.all);
+    assert.deepEqual(JSON.parse(r.stdout), [
+      'https://www.linkedin.com/jobs/view/1/?refId=abc&trk=xyz',
+      'https://www.linkedin.com/jobs/view/2/',
+    ]);
+  } finally { cleanup(f); }
+});
+
+test('an existing ## Pendientes section is appended to, not duplicated with ## Pending', () => {
+  // scan.mjs keeps both markers (older/translated files say `## Pendientes`, and
+  // scan-ats-full.mjs auto-creates that spelling). Matching the exact line
+  // '## Pending' made this run add a second, empty section instead.
+  const f = fixture();
+  try {
+    writeFileSync(join(f.dataRoot, 'data', 'pipeline.md'), [
+      '# Pipeline — Pending URLs', '', '## Pendientes', '',
+      '- [ ] https://www.linkedin.com/jobs/view/999', '',
+    ].join('\n'));
+    const r = run(['--text', 'x https://www.linkedin.com/jobs/view/555 y'], f);
+    assert.equal(r.status, 0, r.all);
+    const lines = pipelineOf(f).split('\n').map((l) => l.trim());
+    assert.ok(lines.includes('- [ ] https://www.linkedin.com/jobs/view/555'), `the link was not added:\n${r.all.slice(0, 300)}`);
+    assert.equal(lines.filter((l) => l === '## Pending').length, 0, 'a second, English Pending section was appended');
+    assert.equal(lines.filter((l) => l === '## Pendientes').length, 1, 'the existing Pendientes section must be the one used');
+  } finally { cleanup(f); }
+});
+
+test('a CRLF pipeline matches its Pending section too', () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.dataRoot, 'data', 'pipeline.md'), [
+      '# Pipeline — Pending URLs', '', '## Pendientes', '',
+      '- [ ] https://www.linkedin.com/jobs/view/999', '',
+    ].join('\r\n'));
+    const r = run(['--text', 'x https://www.linkedin.com/jobs/view/666 y'], f);
+    assert.equal(r.status, 0, r.all);
+    const lines = pipelineOf(f).split('\n').map((l) => l.trim());
+    assert.ok(lines.includes('- [ ] https://www.linkedin.com/jobs/view/666'), `the link was not added:\n${r.all.slice(0, 300)}`);
+    assert.equal(lines.filter((l) => l === '## Pendientes').length, 1, 'the CRLF marker line was not recognized');
+    assert.equal(lines.filter((l) => l === '## Pending').length, 0, 'a second Pending section was appended to a CRLF file');
+  } finally { cleanup(f); }
+});
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitExit = (child) => new Promise((resolve) => child.once('exit', (code) => resolve(code)));
+
+test('a concurrent write to the pipeline is not lost: the append takes the pipeline lock', async () => {
+  // Stands in for scan.mjs's appendToPipeline / plugins.mjs / rank-pipeline.mjs:
+  // take the lock FIRST, snapshot the file (the read half of a real
+  // read-modify-write), start the ingest child, let it run, then write our row.
+  // A child that honours the lock cannot read the file until after that write,
+  // so it re-reads and keeps our row. The unlocked version read the pre-write
+  // snapshot, spliced, and wrote it back — erasing the row we added here.
+  const f = fixture();
+  const pipelinePath = join(f.dataRoot, 'data', 'pipeline.md');
+  let child;
+  try {
+    let childExit;
+    await withPipelineLock(pipelinePath, async () => {
+      const snapshot = pipelineOf(f);
+      child = spawn(process.execPath, [join(ROOT, SCRIPT), '--text', 'x https://www.linkedin.com/jobs/view/222 y'], {
+        cwd: f.decoyCwd,
+        env: env(f.dataRoot),
+      });
+      childExit = waitExit(child);
+      // An unlocked child finishes here and its row appears; a locked one is
+      // still blocked, so the poll simply runs to its deadline.
+      const deadline = Date.now() + 2500;
+      while (Date.now() < deadline && !pipelineOf(f).includes('jobs/view/222')) await sleep(50);
+      writeFileSync(pipelinePath, `${snapshot}- [ ] https://www.linkedin.com/jobs/view/777\n`);
+    });
+    assert.equal(await childExit, 0, 'the ingest child failed');
+    const pipeline = pipelineOf(f);
+    assert.match(pipeline, /- \[ \] https:\/\/www\.linkedin\.com\/jobs\/view\/777/, `the concurrent row is missing:\n${pipeline}`);
+    assert.match(pipeline, /- \[ \] https:\/\/www\.linkedin\.com\/jobs\/view\/222/, `the child's row was erased by the concurrent write:\n${pipeline}`);
+  } finally {
+    if (child && child.exitCode === null) child.kill();
+    cleanup(f);
+  }
 });
 
 test('an alert whose links are all already pending is a reported no-op', () => {

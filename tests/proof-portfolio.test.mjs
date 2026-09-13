@@ -1,14 +1,16 @@
 // tests/proof-portfolio.test.mjs — proof-portfolio drafts a case study from the
 // proof-point ledger and cv.md. It must select targets by status/name, emit the
 // documented JSON shape, keep its per-section prose sourced from user files,
-// and never write anything.
+// and never write anything. Its --self-test must drive the real reader and
+// renderer against a literal ledger (so a broken parse fails it), which the
+// last test proves by running a deliberately regressed copy.
 //
 // Run:  node --test tests/proof-portfolio.test.mjs
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -128,6 +130,32 @@ test('a missing ledger drafts nothing and exits 0', () => {
   } finally { cleanup(f); }
 });
 
+test('--proof is the documented selector, and --name is still its alias', () => {
+  const f = fixture();
+  try {
+    const byProof = run(['--proof', 'RAG', '--json'], f);
+    assert.equal(byProof.status, 0, `exited ${byProof.status}: ${byProof.all.slice(0, 300)}`);
+    assert.deepEqual(JSON.parse(byProof.stdout).map((d) => d.name), ['RAG Eval Harness']);
+
+    const alias = run(['--name', 'RAG', '--json'], f);
+    assert.equal(alias.status, 0, `exited ${alias.status}: ${alias.all.slice(0, 300)}`);
+    assert.deepEqual(JSON.parse(alias.stdout).map((d) => d.name), ['RAG Eval Harness']);
+
+    const bare = run(['--proof'], f);
+    assert.equal(bare.status, 1, `a bare --proof is a usage error:\n${bare.all.slice(0, 300)}`);
+    assert.match(bare.all, /Usage: node proof-portfolio\.mjs --proof/);
+  } finally { cleanup(f); }
+});
+
+test('--json stays JSON — an empty result set is [], not prose', () => {
+  const f = fixture();
+  try {
+    const r = run(['--proof', 'nonexistent', '--json'], f);
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
+    assert.deepEqual(JSON.parse(r.stdout), [], `expected [] from --json:\n${r.stdout.slice(0, 200)}`);
+  } finally { cleanup(f); }
+});
+
 test('text mode prints one rendered draft per target', () => {
   const f = fixture();
   try {
@@ -147,4 +175,31 @@ test('proof-portfolio never writes the ledger or the cwd', () => {
     assert.equal(readFileSync(ledger, 'utf-8'), before, 'proof-portfolio rewrote the ledger');
     assert.deepEqual(readdirSync(f.decoyCwd), [], 'proof-portfolio wrote into the directory it was launched from');
   } finally { cleanup(f); }
+});
+
+test('--self-test fails when the ledger parse regresses', () => {
+  // The self-test must fail on a real regression, not on shapes that hold for
+  // any input. Break the blocks parse in a sandboxed copy and require exit 1.
+  // If proofs() is ever refactored, this replace silently becomes a no-op and
+  // the run passes 3/3 — the assertion below then fails, so update the pattern.
+  const codeRoot = mkdtempSync(join(tmpdir(), 'career-ops-proofportfolio-code-'));
+  const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-proofportfolio-'));
+  const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-proofportfolio-cwd-'));
+  try {
+    const src = readFileSync(join(ROOT, 'proof-portfolio.mjs'), 'utf-8');
+    const mutated = src.replace("blocks: (r[3] || '').split('|').filter(Boolean)", 'blocks: []');
+    writeFileSync(join(codeRoot, 'proof-portfolio.mjs'), mutated);
+    copyFileSync(join(ROOT, 'path-resolver.mjs'), join(codeRoot, 'path-resolver.mjs'));
+    const r = spawnSync(process.execPath, [join(codeRoot, 'proof-portfolio.mjs'), '--self-test'], {
+      cwd: decoyCwd,
+      encoding: 'utf-8',
+      timeout: 60_000,
+      env: { ...process.env, CAREER_OPS_ROOT: dataRoot, CAREER_OPS_DATA_DIR: '' },
+    });
+    assert.equal(r.status, 1, `a regressed parse must fail the self-test:\n${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /proof-portfolio 2\/3 passed/, `the failing check must be reported:\n${r.stdout}`);
+  } finally {
+    cleanup({ dataRoot, decoyCwd });
+    rmSync(codeRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
 });

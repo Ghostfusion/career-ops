@@ -25,10 +25,19 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 // One fixture report per row: the advertised string and the band it denotes.
+//
+// The last three rows are the shapes the Machine Summary schema documents
+// ("80-90k EUR") plus the two the old local parser mangled: a single k value
+// with a decimal, and a cents amount. `band` is the band salary-gap.parseAmount
+// returns for the same string — the two tools read one field, so they must
+// agree.
 const REPORTS = [
   { file: '001-acme-swe.md', role: 'Senior Software Engineer, Applied AI', comp: '$150,000-$200,000', band: [150000, 200000], family: 'swe-ai' },
   { file: '002-globex-swe.md', role: 'Software Engineer', comp: '$120k-$140k', band: [120000, 140000], family: 'swe-ai' },
   { file: '003-initech-pm.md', role: 'Staff Product Manager, Agentic Experiences', comp: '$180,000', band: [180000, 180000], family: 'pm' },
+  { file: '004-umbrella-swe.md', role: 'Backend Software Engineer', comp: '80-90k EUR', band: [80000, 90000], family: 'swe-ai' },
+  { file: '005-hooli-swe.md', role: 'Software Engineer, Platform', comp: '82.5k', band: [82500, 82500], family: 'swe-ai' },
+  { file: '006-stark-swe.md', role: 'Software Engineer, Data', comp: '$123,684.50', band: [123684.5, 123684.5], family: 'swe-ai' },
 ];
 
 /** The documented aggregation of a family's bands. */
@@ -87,7 +96,7 @@ test('the built-in self-test verdict passes', () => {
   const f = fixture();
   try {
     const r = run(['--self-test'], f);
-    assert.match(r.stdout, /salary-trend self-test: 6\/6 passed/, `self-test verdict:\n${r.all.slice(0, 400)}`);
+    assert.match(r.stdout, /salary-trend self-test: 9\/9 passed/, `self-test verdict:\n${r.all.slice(0, 400)}`);
   } finally { cleanup(f); }
 });
 
@@ -105,6 +114,27 @@ test('--json aggregates the advertised bands by role family', () => {
       assert.equal(got.max, expected.max, `${expected.family} observed high`);
       assert.equal(got.medianBand, expected.medianBand, `${expected.family} median band`);
     }
+  } finally { cleanup(f); }
+});
+
+test('k-suffixed ranges, decimal k values and cents parse to the band salary-gap reads', () => {
+  // The defect this pins: the old local parser stripped separators and applied
+  // `k` per number, so "80-90k EUR" read as [90000,90000] (80 fell under its
+  // >=5000 noise filter), "82.5k" as 825000 and "$123,684.50" as 12368450 —
+  // while salary-gap.parseAmount read the same field as [80000,90000], 82500 and
+  // 123684.5. The family span/median/overlap counts were computed off those
+  // wrong numbers.
+  const f = fixture();
+  try {
+    const parsed = JSON.parse(run(['--json'], f).stdout);
+    const swe = parsed.families.find((x) => x.family === 'swe-ai');
+    assert.ok(swe, `swe-ai family missing:\n${JSON.stringify(parsed.families)}`);
+    // per-row bands, read back through the family aggregate: 150k-200k,
+    // 120k-140k, 80k-90k, 82.5k, 123,684.50
+    assert.equal(swe.count, 5, 'the five swe-ai reports must all contribute a band');
+    assert.equal(swe.min, 80000, '"80-90k EUR" must read as 80000 (the k suffix covers both bounds)');
+    assert.equal(swe.max, 200000, 'the highest band is still 200,000');
+    assert.equal(swe.medianBand, 123684.5, `median of the band midpoints: 82.5k, 85k, 123684.5, 130k, 175k\n${JSON.stringify(swe)}`);
   } finally { cleanup(f); }
 });
 

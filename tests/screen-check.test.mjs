@@ -76,6 +76,36 @@ function twoRowFixture() {
   });
 }
 
+// A JD whose filename starts with the report's full slug is this row's posting.
+// The old resolver kept only the slug's FIRST token and took the first jds/ entry
+// matching it, so two postings from one company could be scored against each
+// other's requirements — and the numbers looked real.
+function jdFixture(jdNames) {
+  const f = twoRowFixture();
+  mkdirSync(join(f.dataRoot, 'jds'), { recursive: true });
+  writeFileSync(join(f.dataRoot, 'cv.md'), '# Professional Summary\n\nFixture CV.\n');
+  for (const name of jdNames) {
+    writeFileSync(join(f.dataRoot, 'jds', name), '# Fixture JD\n\nRequirements: Python, LLM evaluation.\n');
+  }
+  return f;
+}
+
+test('one JD matching the report slug is used for the skill gap', () => {
+  const f = jdFixture(['zzquux-backend-engineer.md']);
+  try {
+    const rows = JSON.parse(run(['--json'], f).stdout);
+    assert.notEqual(rows[0].jdSkillGap, null, 'the JD matching the report slug was not used');
+  } finally { cleanup(f); }
+});
+
+test('two JDs sharing the report slug yield no hint rather than the wrong one', () => {
+  const f = jdFixture(['zzquux-backend-engineer.md', 'zzquux-backend-analyst.md']);
+  try {
+    const rows = JSON.parse(run(['--json'], f).stdout);
+    assert.equal(rows[0].jdSkillGap, null, 'an ambiguous JD set must not be attributed to a row');
+  } finally { cleanup(f); }
+});
+
 function run(args, { dataRoot, decoyCwd }) {
   const r = spawnSync(process.execPath, [join(ROOT, 'screen-check.mjs'), ...args], {
     cwd: decoyCwd,

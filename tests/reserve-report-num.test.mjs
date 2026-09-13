@@ -97,3 +97,43 @@ for (const flag of ['--help', '-h']) {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+// Regression: modes/oferta.md documents reserve → write the report → `--release`,
+// and openrouter-runner's finally block releases right after it writes the
+// report. A release guard keyed on "any reports/<NNN>-* file now exists" refused
+// in exactly that case: the flag exited 0 without removing the sentinel and left
+// a leaked NNN-RESERVED.md. The report file itself occupies the number
+// (occupiedFromReports), so releasing the sentinel neither frees it nor risks a
+// collision — the next reservation must still skip 001.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'rrn-release-'));
+  const options = {
+    reportsDir: join(dir, 'reports'),
+    trackerPath: join(dir, 'data', 'applications.md'),
+  };
+  mkdirSync(options.reportsDir, { recursive: true });
+  mkdirSync(join(dir, 'data'), { recursive: true });
+  writeFileSync(
+    options.trackerPath,
+    '# Applications Tracker\n\n'
+    + '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n'
+    + '|---|---|---|---|---|---|---|---|---|\n'
+  );
+  const report = join(options.reportsDir, '001-acme-2026-08-15.md');
+  const sentinel = join(options.reportsDir, '001-RESERVED.md');
+  writeFileSync(report, '# Evaluation\n');
+  writeFileSync(sentinel, JSON.stringify({ pid: process.pid, token: 'owned', created_at: new Date().toISOString() }));
+  try {
+    const removed = await releaseReportNumbers([1], { ...options, force: true });
+    const next = await reserveReportNumbers(1, options);
+    if (removed === 1 && !existsSync(sentinel) && existsSync(report) && String(next[0]).padStart(3, '0') === '002') {
+      pass('--release after the report exists drops the sentinel and 001 stays occupied (documented flow)');
+    } else {
+      fail(`release-after-report: removed=${removed}, sentinel left=${existsSync(sentinel)}, report kept=${existsSync(report)}, next=${next}`);
+    }
+  } catch (err) {
+    fail(`release-after-report: threw ${err.message.split('\n')[0]}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}

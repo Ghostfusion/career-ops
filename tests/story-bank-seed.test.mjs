@@ -5,15 +5,18 @@
 // Every case runs the child with CAREER_OPS_ROOT at a fixture and the cwd at a
 // DIFFERENT decoy directory, so a report path following the cwd (or the
 // checkout) finds nothing while one following the data root finds the fixture.
-// The writer is never exercised: runs use --json, --preview or --no-write, so
-// no real interview-prep file is created by this suite.
+// The write cases run against the fixture root only, and the checkout's own
+// interview-prep/story-bank.md is hashed before and after to prove it: a
+// default run into an EMPTY root seeds the bank, and a default run into a root
+// that already has one refuses (exit 3) unless --force is passed.
 //
 // Run:  node --test tests/story-bank-seed.test.mjs
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -79,6 +82,48 @@ function run(scriptArgs, { dataRoot, decoyCwd }) {
 const cleanup = (f) => {
   for (const d of [f.dataRoot, f.decoyCwd]) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 };
+
+const bankPathOf = (f) => join(f.dataRoot, 'interview-prep', 'story-bank.md');
+// The checkout's own bank is USER layer: no case here may write it.
+const CHECKOUT_BANK = join(ROOT, 'interview-prep', 'story-bank.md');
+const sha = (p) => (existsSync(p) ? createHash('sha256').update(readFileSync(p)).digest('hex') : null);
+
+test('a fresh data root is seeded by default', () => {
+  const f = fixture();
+  const before = sha(CHECKOUT_BANK);
+  try {
+    const r = run([], f);
+    assert.equal(r.status, 0, r.all);
+    assert.match(r.stdout, /story-bank: 2 unique, recurring titles/);
+    assert.match(readFileSync(bankPathOf(f), 'utf8'), /### \[Agents & Automation\] CrewAI agents/, 'the default run must still seed an empty root');
+    assert.equal(sha(CHECKOUT_BANK), before, 'a fixture-root run wrote the checkout story bank');
+  } finally { cleanup(f); }
+});
+
+test('an existing bank is left alone unless --force, and --force overwrites it', () => {
+  // The rendered bank invites curation ("Edit freely — this is user layer"), so
+  // a default re-run used to destroy those edits silently. It must refuse.
+  const f = fixture();
+  const curated = '# Story Bank\n\nMy curated story — handwritten, not regenerable.\n';
+  const before = sha(CHECKOUT_BANK);
+  try {
+    mkdirSync(join(f.dataRoot, 'interview-prep'), { recursive: true });
+    writeFileSync(bankPathOf(f), curated);
+
+    const refused = run([], f);
+    assert.equal(refused.status, 3, `expected the documented refusal exit:\n${refused.all.slice(0, 400)}`);
+    assert.match(refused.all, /already exists — refusing to overwrite/, `the refusal must say why:\n${refused.all.slice(0, 400)}`);
+    assert.match(refused.all, /--preview/, 'the refusal must offer --preview');
+    assert.match(refused.all, /--force/, 'the refusal must offer --force');
+    assert.equal(readFileSync(bankPathOf(f), 'utf8'), curated, 'the default run destroyed a curated bank');
+
+    const forced = run(['--force'], f);
+    assert.equal(forced.status, 0, forced.all);
+    assert.match(forced.stdout, /story-bank: 2 unique, recurring titles/);
+    assert.match(readFileSync(bankPathOf(f), 'utf8'), /### \[Agents & Automation\] CrewAI agents/, '--force must overwrite the bank with the seed');
+    assert.equal(sha(CHECKOUT_BANK), before, 'a fixture-root run wrote the checkout story bank');
+  } finally { cleanup(f); }
+});
 
 test('--self-test exits 0 with its own 7/7 verdict', () => {
   const f = fixture();

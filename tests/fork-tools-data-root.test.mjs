@@ -87,7 +87,7 @@ function fixture() {
   writeFileSync(join(dataRoot, 'data', 'applications.md'), TRACKER);
   writeFileSync(join(dataRoot, 'reports', '001-northwind-analytics-2026-01-05.md'), REPORT_ONE);
   writeFileSync(join(dataRoot, 'reports', '002-cobalt-robotics-2026-01-06.md'), REPORT_TWO);
-  writeFileSync(join(dataRoot, 'jds', 'northwind-senior-engineer.md'), [
+  writeFileSync(join(dataRoot, 'jds', 'northwind-analytics-senior-engineer.md'), [
     '# Senior Software Engineer, Northwind Analytics',
     '',
     'Requirements: 5+ years Python, LLM evaluation harnesses, retrieval pipelines,',

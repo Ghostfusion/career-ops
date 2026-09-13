@@ -72,6 +72,28 @@ function fixture() {
   return { dataRoot, decoyCwd };
 }
 
+test('--complete names the row space, so a foreign Report number cannot block it', () => {
+  // set-status treats a bare number as ambiguous between the row counter and the
+  // report counter, and a row whose Report cell links a different report number
+  // than its own is normal once the counters diverge. Passing the bare number
+  // made set-status exit 3 — invisible here because stdio is 'ignore', so
+  // --complete failed with "Command failed" and never marked the row.
+  const f = fixture();
+  try {
+    writeFileSync(join(f.dataRoot, 'data', 'applications.md'), [
+      ...TRACKER_HEADER,
+      '| 1 | 2026-01-05 | Acme | Backend Engineer | 4.6/5 | Evaluated | ❌ | [1](reports/1-acme.md) | n |',
+      '| 2 | 2026-02-05 | Globex | ML Engineer | 4.4/5 | Evaluated | ❌ | [12](reports/12-globex.md) | n |',
+      '',
+    ].join('\n'));
+
+    const r = run(['--complete', '2'], f);
+    assert.equal(r.status, 0, `--complete failed on a divergent report number:\n${r.all.slice(0, 400)}`);
+    const tracker = readFileSync(join(f.dataRoot, 'data', 'applications.md'), 'utf-8');
+    assert.match(tracker, /\| 2 \|.*\| Applied \|/, `row 2 was not marked Applied:\n${tracker.slice(0, 400)}`);
+  } finally { cleanup(f); }
+});
+
 function run(args, { dataRoot, decoyCwd }) {
   const r = spawnSync(process.execPath, [join(ROOT, 'apply-queue.mjs'), ...args], {
     cwd: decoyCwd,

@@ -51,7 +51,7 @@ const PROFILE_YML = [
   '',
 ].join('\n');
 
-function fixture({ withProfile = true } = {}) {
+function fixture({ withProfile = true, profile = PROFILE_YML } = {}) {
   const codeRoot = mkdtempSync(join(tmpdir(), 'career-ops-archetypecv-code-'));
   const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-archetypecv-'));
   const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-archetypecv-cwd-'));
@@ -63,8 +63,8 @@ function fixture({ withProfile = true } = {}) {
   if (withProfile) {
     mkdirSync(join(codeRoot, 'config'), { recursive: true });
     mkdirSync(join(dataRoot, 'config'), { recursive: true });
-    writeFileSync(join(codeRoot, 'config', 'profile.yml'), PROFILE_YML);
-    writeFileSync(join(dataRoot, 'config', 'profile.yml'), PROFILE_YML);
+    writeFileSync(join(codeRoot, 'config', 'profile.yml'), profile);
+    writeFileSync(join(dataRoot, 'config', 'profile.yml'), profile);
   }
   return { codeRoot, dataRoot, decoyCwd };
 }
@@ -151,6 +151,26 @@ test('no profile.yml means no archetypes — and the self-test says so', () => {
     assert.equal(st.status, 1, `a missing profile must not pass the self-test: ${st.all}`);
     assert.match(st.all, /archetype-cv 2\/3 passed/);
     assert.match(st.all, /reads archetypes/);
+  } finally { cleanup(f); }
+});
+
+test('--self-test fails when the profile advertises an archetype with no calibrated sample', () => {
+  // The check used to count the keys of a hard-coded literal, so a profile with
+  // an uncalibrated archetype still reported 3/3 while the sample for that
+  // archetype rendered no headline and no skills.
+  const profile = [
+    'archetypes:',
+    ...ARCHETYPES.flatMap((name) => [`  - name: "${name}"`, '    level: senior']),
+    '  - name: "Quantum Prompt Whisperer"',
+    '    level: senior',
+    '',
+  ].join('\n');
+  const f = fixture({ profile });
+  try {
+    const st = run(['--self-test'], f);
+    assert.equal(st.status, 1, `an uncalibrated archetype must not pass the self-test:\n${st.all}`);
+    assert.match(st.all, /archetype-cv 2\/3 passed/);
+    assert.match(st.all, /❌ archetypes have skills/);
   } finally { cleanup(f); }
 });
 

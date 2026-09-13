@@ -31,6 +31,7 @@ function fixture() {
     '| 1 | 2026-01-05 | Acme | Backend Engineer | 4.2/5 | Applied | ✅ | [1](reports/1-acme.md) | n |',
     '| 2 | 2026-02-05 | Globex | ML Engineer | 4.4/5 | Rejected | ✅ | [2](reports/2-globex.md) | n |',
     '| 3 | 2026-03-05 | Initech | Data Engineer | 3.1/5 | Rejected | ✅ | [3](reports/3-initech.md) | no report on file |',
+    '| 4 | 2026-04-05 | Soylent | Analyst | 3.9/5 | Rejected | ✅ | [4](reports/4-none.md) |  |',
     '',
   ].join('\n'));
   // The first soft gap is a relocation blocker the proposal must skip; the
@@ -121,6 +122,35 @@ test('a non-Rejected row is treated as a preventive review, not an error', () =>
     const r = run(['1'], f);
     assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
     assert.match(r.all, /row is Applied, not Rejected/);
+  } finally { cleanup(f); }
+});
+
+test('a non-Rejected row emits pure JSON on stdout, with the note on stderr', () => {
+  const f = fixture();
+  try {
+    const r = run(['1', '--json'], f);
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
+    // The preventive-review note used to be printed to stdout BEFORE the JSON
+    // payload, so parsing the documented --json output failed for this class
+    // of row.
+    const proposal = JSON.parse(r.stdout);
+    assert.equal(proposal.row, 1);
+    assert.equal(proposal.company, 'Acme');
+    assert.match(r.stderr, /row is Applied, not Rejected/);
+    assert.doesNotMatch(r.stdout, /not Rejected/);
+  } finally { cleanup(f); }
+});
+
+test('a report-less row with empty notes uses the gap fallback in gap and action', () => {
+  const f = fixture();
+  try {
+    const r = run(['4', '--json'], f);
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
+    const proposal = JSON.parse(r.stdout);
+    assert.equal(proposal.gap, 'no explicit gap in report');
+    assert.equal(proposal.target, 'cv.md');
+    // The action interpolated the raw (empty) gap, rendering `address: “”`.
+    assert.match(proposal.action, /address: “no explicit gap in report”$/);
   } finally { cleanup(f); }
 });
 

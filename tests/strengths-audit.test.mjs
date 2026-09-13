@@ -5,6 +5,12 @@
 // Both inputs are the user's, under the data root: cv.md and
 // data/proof-points.tsv. The audit is advertised as advisory — "the audit never
 // fails" — so the missing-input boundary is a clean exit 0, not an error.
+// (Its --self-test is not the same contract: it fails when it cannot read the
+// CV it audits, so a broken audit cannot report itself healthy.)
+//
+// The fact-check line is fed by verify-cv-facts.mjs --json run against the
+// data-root cv.md; only a check that actually ran and returned "pass" may read
+// "clean".
 //
 // Run:  node --test tests/strengths-audit.test.mjs
 
@@ -43,6 +49,10 @@ const PROOF_POINTS = [
   '',
 ].join('\n');
 
+// Counts verify-cv-facts cannot bind to any noun in its list, so it reports the
+// document as unchecked (verdict warn) rather than as clean.
+const UNCHECKABLE_CV = '# CV\n\n## Summary\n\nLed 12 squids and 7 whatsits.\n';
+
 function fixture({ cv = CV_MD, proofPoints = PROOF_POINTS } = {}) {
   const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-strengths-'));
   const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-strengths-cwd-'));
@@ -73,6 +83,20 @@ test('--self-test reports its own verdict', () => {
     const r = run(['--self-test'], f);
     assert.equal(r.status, 0, `self-test exited ${r.status}:\n${r.all}`);
     assert.match(r.all, /strengths-audit 3\/3 passed/);
+    assert.match(r.all, /✅ cv readable/);
+  } finally { cleanup(f); }
+});
+
+test('--self-test fails when the CV it audits is not there', () => {
+  // The checks used to be true by construction (typeof on a possibly empty
+  // read, typeof on a count, the length of a literal), so nothing they looked
+  // at could ever make them fail.
+  const f = fixture({ cv: null });
+  try {
+    const r = run(['--self-test'], f);
+    assert.equal(r.status, 1, `a self-test that cannot read its own input must fail:\n${r.all}`);
+    assert.match(r.all, /strengths-audit 2\/3 passed/);
+    assert.match(r.all, /❌ cv readable/);
   } finally { cleanup(f); }
 });
 
@@ -85,6 +109,7 @@ test('--json counts proof-points and detects the sections actually present in th
     assert.deepEqual(payload.proofs, { total: 3, published: 2, inprogress: 1 });
     assert.deepEqual(payload.sections, ['Skills', 'Professional Summary', 'Work Experience']);
     assert.ok(Array.isArray(payload.warnings), 'warnings must always be an array');
+    assert.deepEqual(payload.factCheck, { ran: true, verdict: 'pass' }, 'a machine consumer cannot tell a clean payload from one whose check never ran');
   } finally { cleanup(f); }
 });
 
@@ -105,7 +130,37 @@ test('the human-readable run reports counts, sections and the page-length signal
     assert.match(r.stdout, /proof-points\s+: 3 total \(2 published, 1 in progress\)/);
     assert.match(r.stdout, /CV sections\s+: Skills, Professional Summary, Work Experience/);
     assert.match(r.stdout, /approx length\s+: ~\d+\.\d+k chars/);
-    assert.match(r.stdout, /fact check\s+: /);
+    // The fact check ran against the fixture CV (and against real cv.md content
+    // it can bind); a pass is the only state allowed to read "clean".
+    assert.match(r.stdout, /fact check\s+: clean/);
+  } finally { cleanup(f); }
+});
+
+test('a fact check that could not run is never reported as clean', () => {
+  const f = fixture({ cv: null });
+  try {
+    const r = run([], f);
+    assert.equal(r.status, 0, `the advisory audit must never fail; exited ${r.status}: ${r.all}`);
+    assert.doesNotMatch(r.stdout, /fact check\s+: clean/, 'the audit claimed a clean fact check with no CV to check');
+    assert.match(r.stdout, /fact check\s+: not run — no cv\.md to check/);
+    const payload = JSON.parse(run(['--json'], f).stdout);
+    assert.deepEqual(payload.factCheck, { ran: false, verdict: null });
+  } finally { cleanup(f); }
+});
+
+test('a fact-gate verdict other than pass is surfaced, not flattened into clean', () => {
+  // Numbers the fact gate cannot bind to any noun it knows: it reports the
+  // document as unchecked, which is a warn verdict, not a pass.
+  const f = fixture({ cv: UNCHECKABLE_CV, proofPoints: null });
+  try {
+    const r = run([], f);
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all}`);
+    const payload = JSON.parse(run(['--json'], f).stdout);
+    assert.equal(payload.factCheck.ran, true, 'the fact check did not run against the CV it was told to check');
+    assert.notEqual(payload.factCheck.verdict, 'pass',
+      'this fixture no longer exercises a non-pass verdict — pick a CV verify-cv-facts cannot fully check');
+    assert.match(r.stdout, new RegExp(`fact check\\s+: ⚠ verify-cv-facts verdict: ${payload.factCheck.verdict}`));
+    assert.doesNotMatch(r.stdout, /fact check\s+: clean/);
   } finally { cleanup(f); }
 });
 

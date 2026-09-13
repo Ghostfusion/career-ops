@@ -189,3 +189,30 @@ test('--add never rewrites the tracker', () => {
     assert.equal(readFileSync(tracker, 'utf-8'), before, 'proof-point-bank is documented as tracker-safe');
   } finally { cleanup(f); }
 });
+
+test('--set rejects an invalid status and writes nothing', () => {
+  const f = fixture();
+  try {
+    const ledger = join(f.dataRoot, 'data', 'proof-points.tsv');
+    const before = readFileSync(ledger, 'utf-8');
+    const r = run(['--set', 'rag-demo', 'shipped'], f);
+    assert.equal(r.status, 1, `an unknown status is a usage error:\n${r.all.slice(0, 300)}`);
+    assert.match(r.stderr, /invalid status "shipped" — use idea\|building\|published/, `--set must use the same message style as --add:\n${r.all.slice(0, 300)}`);
+    assert.equal(readFileSync(ledger, 'utf-8'), before, 'an invalid status must not rewrite the ledger');
+    // The old status also survives a re-read: nothing was silently substituted.
+    const row = JSON.parse(run(['--list', 'json'], f).stdout).find((x) => x.name === 'rag-demo');
+    assert.equal(row.status, 'building');
+  } finally { cleanup(f); }
+});
+
+test('a write leaves no blank record between the header and the first row', () => {
+  const f = fixture();
+  try {
+    const r = run(['--add', 'new-demo'], f);
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
+    const lines = readFileSync(join(f.dataRoot, 'data', 'proof-points.tsv'), 'utf-8').split('\n');
+    assert.equal(lines[0], 'name\tstatus\turl\tblocks\tupdated', 'the header stays first');
+    assert.notEqual(lines[1], '', 'the header must be followed by a record, not a blank line');
+    assert.equal(lines[1].split('\t')[0], 'eval-harness', `the first record moved:\n${lines.slice(0, 4).join('\\n')}`);
+  } finally { cleanup(f); }
+});

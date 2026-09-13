@@ -179,6 +179,30 @@ test('--dismiss/--reedit round-trips through data/launchpad-state.json only', ()
   } finally { cleanup(f); }
 });
 
+test('--reedit without a row is a usage error and writes nothing', () => {
+  // The old code rewrote the state unchanged and printed `un-dismissed ` with an
+  // empty list — --dismiss had the guard, --reedit did not.
+  const f = fixture();
+  try {
+    const r = run(['--reedit'], f);
+    assert.equal(r.status, 2, `expected the documented usage exit:\n${r.all.slice(0, 300)}`);
+    assert.match(r.all, /Usage: node launchpad\.mjs --reedit/, 'the usage line must name the operand');
+    assert.equal(existsSync(statePathFor(f)), false, 'a usage error must not create the state file');
+    assert.deepEqual(readdirSync(f.decoyCwd), [], 'launchpad wrote into the cwd it was launched from');
+  } finally { cleanup(f); }
+});
+
+test('a missing tracker is the documented exit 2, not a raw ENOENT stack', () => {
+  const f = fixture();
+  try {
+    rmSync(trackerFor(f), { force: true });
+    const r = run([], f);
+    assert.equal(r.status, 2, `expected the documented not-found exit:\n${r.all.slice(0, 400)}`);
+    assert.match(r.all, /no tracker found at/, 'the message must name the missing path');
+    assert.doesNotMatch(r.all, /ENOENT|node:fs:/, 'a raw stack trace is not a contract');
+  } finally { cleanup(f); }
+});
+
 test('a bad selector is the documented exit 2 and writes no state', () => {
   const f = fixture();
   try {

@@ -215,3 +215,79 @@ test('no deadlines at all is a clean, silent-empty result', () => {
     assert.deepEqual(readdirSync(f.decoyCwd), [], 'a run wrote into the cwd it was launched from');
   } finally { cleanup(f); }
 });
+
+test('a bare "expires <date>" marker is recognized, like "offer expires"', () => {
+  // The header lists `expires YYYY-MM-DD` as a recognized marker; MARKER_RE only
+  // matched it behind an "offer" prefix, so a Notes cell saying plain "expires"
+  // was never reported.
+  const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-deadlines-bare-'));
+  const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-deadlines-bare-cwd-'));
+  try {
+    mkdirSync(join(dataRoot, 'data'), { recursive: true });
+    writeFileSync(join(dataRoot, 'data', 'applications.md'), [
+      ...TRACKER_HEADER,
+      trackerRow(1, '2026-01-05', 'Acme', 'Backend Engineer', '4.2', 'Offer', `expires ${isoIn(2)}`),
+      '',
+    ].join('\n'));
+
+    const r = run(['--json'], { dataRoot, decoyCwd });
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
+    const rows = JSON.parse(r.stdout);
+    assert.equal(rows.length, 1, `the bare expires marker was not recognized:\n${r.stdout.slice(0, 300)}`);
+    assert.equal(rows[0].label, 'expires');
+    assert.equal(rows[0].daysOut, 2);
+  } finally {
+    for (const d of [dataRoot, decoyCwd]) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
+test('two dated markers in one Notes cell both become records', () => {
+  // `match()` returned only the first marker in the cell, so a Notes cell with
+  // `reply-by X; offer expires Y` reported X and silently lost Y.
+  const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-deadlines-multi-'));
+  const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-deadlines-multi-cwd-'));
+  try {
+    mkdirSync(join(dataRoot, 'data'), { recursive: true });
+    writeFileSync(join(dataRoot, 'data', 'applications.md'), [
+      ...TRACKER_HEADER,
+      trackerRow(1, '2026-01-05', 'Acme', 'Backend Engineer', '4.2', 'Offer', `reply-by ${isoIn(1)}; offer expires ${isoIn(3)}`),
+      '',
+    ].join('\n'));
+
+    const r = run(['--json'], { dataRoot, decoyCwd });
+    assert.equal(r.status, 0, `exited ${r.status}: ${r.all.slice(0, 300)}`);
+    const rows = JSON.parse(r.stdout);
+    assert.deepEqual(rows.map((x) => x.label), ['reply-by', 'offer expires']);
+    assert.deepEqual(rows.map((x) => x.daysOut), [1, 3]);
+    assert.deepEqual(rows.map((x) => x.num), [1, 1]);
+  } finally {
+    for (const d of [dataRoot, decoyCwd]) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
+test('the human view surfaces a deadline older than 30 days, like --json', () => {
+  // A 30-day recency floor hid long-expired offers from the human view even
+  // though the header promises "inside a lookahead window … or already past"
+  // and --json reported them.
+  const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-deadlines-old-'));
+  const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-deadlines-old-cwd-'));
+  try {
+    mkdirSync(join(dataRoot, 'data'), { recursive: true });
+    writeFileSync(join(dataRoot, 'data', 'applications.md'), [
+      ...TRACKER_HEADER,
+      trackerRow(1, '2026-01-05', 'Acme', 'Backend Engineer', '4.2', 'Offer', `offer expires ${isoIn(-40)}`),
+      '',
+    ].join('\n'));
+
+    const j = run(['--json'], { dataRoot, decoyCwd });
+    assert.equal(j.status, 0, j.all);
+    assert.deepEqual(JSON.parse(j.stdout).map((x) => x.daysOut), [-40]);
+
+    const human = run([], { dataRoot, decoyCwd });
+    assert.equal(human.status, 0, human.all);
+    assert.match(human.stdout, /⏰ 1 deadline\(s\) to watch:/);
+    assert.match(human.stdout, /#1 Acme · Backend Engineer \[Offer\]\s+offer expires \S+\s+\(overdue 40d\)/);
+  } finally {
+    for (const d of [dataRoot, decoyCwd]) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+});

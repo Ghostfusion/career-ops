@@ -44,7 +44,7 @@ function expectedEv(row) {
 }
 
 const rowLine = (row) =>
-  `| ${row.num} | 2026-01-0${row.num} | ${row.company} | ${row.role} | ${row.score}/5 | Evaluated | yes | [${row.num}](${row.num}-x.md) | n |`;
+  `| ${row.num} | 2026-01-${String(row.num).padStart(2, '0')} | ${row.company} | ${row.role} | ${row.score}/5 | Evaluated | yes | [${row.num}](${row.num}-x.md) | n |`;
 
 function reportText(row) {
   const lines = ['# Evaluation', '', '```yaml', `role: ${row.role}`];
@@ -55,7 +55,7 @@ function reportText(row) {
   return lines.join('\n');
 }
 
-function fixture({ withData = true } = {}) {
+function fixture({ withData = true, rows = ROWS } = {}) {
   const dataRoot = mkdtempSync(join(tmpdir(), 'career-ops-ev-'));
   const decoyCwd = mkdtempSync(join(tmpdir(), 'career-ops-ev-cwd-'));
   if (withData) {
@@ -63,9 +63,9 @@ function fixture({ withData = true } = {}) {
     mkdirSync(join(dataRoot, 'reports'), { recursive: true });
     writeFileSync(join(dataRoot, 'data', 'applications.md'), [
       '# Applications Tracker', '', HEADER, SEPARATOR,
-      ...ROWS.map(rowLine), '',
+      ...rows.map(rowLine), '',
     ].join('\n'));
-    for (const row of ROWS) writeFileSync(join(dataRoot, 'reports', `${row.num}-${row.company.toLowerCase()}.md`), reportText(row));
+    for (const row of rows) writeFileSync(join(dataRoot, 'reports', `${row.num}-${row.company.toLowerCase()}.md`), reportText(row));
   }
   return { dataRoot, decoyCwd };
 }
@@ -110,6 +110,22 @@ test('--json scores each row with the documented formula and ranks highest-first
       assert.equal(got.ev, expectedEv(row), `row ${row.num} EV`);
     }
     assert.ok(parsed[0].ev > parsed[1].ev, 'the structural blocker was not ranked below the clearable row');
+  } finally { cleanup(f); }
+});
+
+test('--json emits every ranked row, while the human view keeps its own cap', () => {
+  // 17 rows is past the 15 the JSON branch used to slice to, so a machine
+  // consumer quietly lost rows 16+ that the human view never printed either.
+  const rows = Array.from({ length: 17 }, (_, i) => ({
+    num: i + 1, company: `Firm ${i + 1}`, role: 'Platform Engineer', score: 5, comp: null, blocker: null,
+  }));
+  const f = fixture({ rows });
+  try {
+    const parsed = JSON.parse(run(['--json'], f).stdout);
+    assert.deepEqual(parsed.map((r) => r.num), rows.map((r) => r.num),
+      `the payload carried ${parsed.length} of ${rows.length} ranked rows`);
+    const printed = run([], f).stdout.split('\n').filter((l) => /^\s+\d+\.\d\d\s+#\d+\s/.test(l));
+    assert.equal(printed.length, 12, 'the human-readable view is meant to stay capped at 12 rows');
   } finally { cleanup(f); }
 });
 
