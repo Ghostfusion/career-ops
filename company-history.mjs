@@ -1199,15 +1199,25 @@ async function runSelfTest() {
 
   // --- absent-file degradation: each source absent -> false, no crash, other axes still work ---
   {
-    const bogusRoot = join(CAREER_OPS, '__does-not-exist__');
-    const tracker = loadTrackerRows(bogusRoot);
-    check(tracker.loaded === false && tracker.rows.length === 0, 'loadTrackerRows against a nonexistent root degrades gracefully');
+    // resolveTrackerPath() prefers the CAREER_OPS_TRACKER override, so an
+    // ambient one makes this "nonexistent root" point at a real tracker and the
+    // checks below fail. The degradation contract is about the root argument,
+    // so the override is lifted for the duration.
+    const savedTracker = process.env.CAREER_OPS_TRACKER;
+    delete process.env.CAREER_OPS_TRACKER;
+    try {
+      const bogusRoot = join(CAREER_OPS, '__does-not-exist__');
+      const tracker = loadTrackerRows(bogusRoot);
+      check(tracker.loaded === false && tracker.rows.length === 0, 'loadTrackerRows against a nonexistent root degrades gracefully');
 
-    const followups = loadFollowupRows(bogusRoot);
-    check(followups.loaded === false && followups.rows.length === 0, 'loadFollowupRows against a nonexistent root degrades gracefully');
+      const followups = loadFollowupRows(bogusRoot);
+      check(followups.loaded === false && followups.rows.length === 0, 'loadFollowupRows against a nonexistent root degrades gracefully');
 
-    const scanHistory = loadRepostClusters(bogusRoot);
-    check(scanHistory.loaded === false && scanHistory.clusters.length === 0, 'loadRepostClusters against a nonexistent root degrades gracefully');
+      const scanHistory = loadRepostClusters(bogusRoot);
+      check(scanHistory.loaded === false && scanHistory.clusters.length === 0, 'loadRepostClusters against a nonexistent root degrades gracefully');
+    } finally {
+      if (savedTracker !== undefined) process.env.CAREER_OPS_TRACKER = savedTracker;
+    }
 
     const result = buildCompanyCards(
       {

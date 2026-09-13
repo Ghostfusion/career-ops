@@ -38,8 +38,9 @@ import { decodeEntities } from './providers/_html-entities.mjs';
 import { asciiFold } from './lib/ascii-fold.mjs';
 import { loadProviders, resolveProvider } from './providers/_registry.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const DEFAULT_PORTALS_PATH = process.env.CAREER_OPS_PORTALS || 'portals.yml';
+const DEFAULT_PORTALS_PATH = process.env.CAREER_OPS_PORTALS || resolve(getCareerOpsRoot(), 'portals.yml');
 
 // The core providers/ directory — the SAME plugins the scanner loads. Resolved
 // from this file's location so it's independent of the caller's cwd.

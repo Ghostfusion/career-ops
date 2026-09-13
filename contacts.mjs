@@ -437,12 +437,19 @@ function writeVcf(contacts, quality) {
     return;
   }
   const outPath = resolve(vcfPathArg ?? DEFAULT_VCF);
-  // Path-traversal guard: keep the vCard write inside the project directory so
-  // a crafted output argument (e.g. "../../etc/cron.d/x") can't escape the
-  // repo. Anchored to the repo root (CAREER_OPS), not process.cwd() — see the
-  // generate-pdf.mjs precedent. Cheap lexical gate first…
-  const relOut = relative(CAREER_OPS, outPath);
-  if (relOut === '' || relOut.startsWith('..') || isAbsolute(relOut)) {
+  // Path-traversal guard: keep the vCard write inside a project root so a
+  // crafted output argument (e.g. "../../etc/cron.d/x") can't escape. Checked
+  // against BOTH roots: the data root owns the default output and every
+  // user-layer file, while the code checkout is what the guard historically
+  // accepted. Anchored to CAREER_OPS alone, the documented --vcf target was
+  // refused whenever the data root was relocated — the command could not write
+  // at all in that layout. Cheap lexical gate first…
+  const PROJECT_ROOTS = [DATA_ROOT, CAREER_OPS];
+  const insideRoot = (root, p) => {
+    const rel = relative(root, p);
+    return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  };
+  if (!PROJECT_ROOTS.some((r) => insideRoot(r, outPath))) {
     console.error(`Refusing to write the vCard outside the project directory: ${outPath}`);
     process.exit(1);
   }
@@ -461,12 +468,15 @@ function writeVcf(contacts, quality) {
     console.error(`Refusing to write the vCard outside the project directory: ${outPath}`);
     process.exit(1);
   }
-  const repoReal = realpathSync(CAREER_OPS);
   const canonicalTarget = existsSync(outPath)
     ? realpathSync(outPath)
     : join(realpathSync(dirname(outPath)), basename(outPath));
-  const relReal = relative(repoReal, canonicalTarget);
-  if (relReal === '' || relReal === '..' || relReal.startsWith(`..${sep}`) || isAbsolute(relReal)) {
+  const insideRealRoot = (root) => {
+    let real;
+    try { real = realpathSync(root); } catch { return false; }
+    return insideRoot(real, canonicalTarget);
+  };
+  if (!PROJECT_ROOTS.some(insideRealRoot)) {
     console.error(`Refusing to write the vCard outside the project directory: ${outPath}`);
     process.exit(1);
   }

@@ -181,12 +181,9 @@ test('story-bank-seed resolves the bank under the data root', () => {
 test('screen-check finds the JD in the data-root jds/ and runs the skill gap', () => {
   const f = fixture();
   try {
-    // cwd is the data root here, not a decoy: the delegated jd-skill-gap.mjs
-    // reads `const CV_PATH = 'cv.md'` relative to the cwd (upstream behavior),
-    // so a decoy cwd would fail the child for a reason unrelated to the jds/
-    // lookup under test. The assertion still discriminates: the checkout has no
-    // `northwind-*` file in its own jds/, so a code-root lookup yields null.
-    const r = run('screen-check.mjs', ['--json'], f, f.dataRoot);
+    // Decoy cwd: jd-skill-gap.mjs resolves cv.md from the data root, so nothing
+    // about this case may depend on where the process was launched.
+    const r = run('screen-check.mjs', ['--json'], f);
     const rows = JSON.parse(r.stdout);
     const row = rows.find((x) => x.num === 1);
     assert.ok(row, `fixture row missing from screen-check:\n${r.stdout.slice(0, 300)}`);

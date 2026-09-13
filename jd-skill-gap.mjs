@@ -27,12 +27,18 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { canonicalize, extractSkills } from './skill-extract.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
 
-const CV_PATH = 'cv.md';
+// cv.md is a user-layer file of the data root. As a bare cwd-relative literal it
+// ignored CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR and failed from any cwd other
+// than the install directory — which is why screen-check.mjs had to pin its
+// child's cwd to make the skill-gap hint work.
+const CV_PATH = join(getCareerOpsRoot(), 'cv.md');
 
 // ── JD skill extraction (regex, no LLM) ─────────────────────────────
 //

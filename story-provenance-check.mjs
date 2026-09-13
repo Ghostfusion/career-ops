@@ -156,11 +156,17 @@
 import { readFileSync, existsSync } from 'fs';
 import { flagValue } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
 
-const DEFAULT_STORY_BANK_PATH = 'interview-prep/story-bank.md';
-const DEFAULT_CV_PATH = 'cv.md';
+// Both are user-layer files of the data root. As cwd-relative literals they
+// ignored CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR, so from any other cwd this
+// reported "not found … Claims checked: 0" and exited 0 — a provenance check
+// that silently checked nothing. `--story-bank` / `--cv` still override.
+const DATA_ROOT = getCareerOpsRoot();
+const DEFAULT_STORY_BANK_PATH = `${DATA_ROOT}/interview-prep/story-bank.md`;
+const DEFAULT_CV_PATH = `${DATA_ROOT}/cv.md`;
 
 // ── Numeric claim patterns ──────────────────────────────────────────
 // Each pattern extracts {kind, text, index, values}. `values` are the

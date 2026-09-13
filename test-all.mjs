@@ -12915,16 +12915,25 @@ try {
 console.log('\n12. Cold-start trigger (deterministic onboarding state)');
 
 try {
-  // Virgin env: none of the 4 user-layer prerequisites present → must onboard.
+  // Virgin env: cv.md, config/profile.yml and portals.yml are absent → must
+  // onboard. `modes/_profile.md` is one of the four prerequisites, but doctor
+  // SEEDS it from its template on this run (AGENTS.md: doctor auto-copies
+  // modes/_profile.md and _brief.md, "so they always exist"), so a virgin target
+  // reports three missing plus the three modes templates it just copied. The old
+  // assertion expected four missing, which only held while the copy silently
+  // failed for every modes/* target (ENOENT on the missing modes/ directory).
   const virgin = mkdtempSync(join(tmpdir(), 'co-cold-'));
   const v = JSON.parse(run(NODE, ['doctor.mjs', '--json', '--target', virgin]) || '{}');
+  const seeded = ['modes/_profile.md', 'modes/_custom.md', 'modes/_brief.md'];
   if (
     v.onboardingNeeded === true &&
     Array.isArray(v.missing) &&
-    v.missing.length === 4 &&
+    v.missing.length === 3 &&
+    Array.isArray(v.autoCopied) &&
+    seeded.every((f) => v.autoCopied.includes(f)) &&
     Array.isArray(v.warnings)
   ) {
-    pass('Virgin env → onboarding triggered (4 prerequisites missing)');
+    pass('Virgin env → onboarding triggered (3 prerequisites missing, 3 templates seeded)');
   } else {
     fail(`Virgin env not flagged for onboarding: ${JSON.stringify(v)}`);
   }

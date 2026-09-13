@@ -15,10 +15,11 @@ import { tmpdir } from 'os';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as yaml from 'js-yaml';
 import { flagValue, hasFlag } from './lib/cli-flags.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PROVIDERS_DIR = join(ROOT, 'providers');
-const DEFAULT_PORTALS_PATH = process.env.CAREER_OPS_PORTALS || 'portals.yml';
+const DEFAULT_PORTALS_PATH = process.env.CAREER_OPS_PORTALS || join(getCareerOpsRoot(), 'portals.yml');
 
 function add(list, path, message) {
   list.push({ path, message });

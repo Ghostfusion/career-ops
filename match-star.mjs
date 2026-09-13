@@ -14,12 +14,18 @@
  *   node match-star.mjs --list    # list all stories with their tags
  */
 
+import { join } from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
 
-const STORY_BANK_PATH = 'interview-prep/story-bank.md';
+// A user-layer file of the data root, not a cwd-relative path: the relative
+// literal meant "not found" for a bank that exists whenever the cwd was not the
+// install directory (and ignored CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR
+// entirely). screen-check.mjs pinned its child's cwd to work around exactly this.
+const STORY_BANK_PATH = join(getCareerOpsRoot(), 'interview-prep', 'story-bank.md');
 
 const args       = process.argv.slice(2);
 const LIST_MODE  = args.includes('--list');

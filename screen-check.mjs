@@ -108,11 +108,8 @@ function verdictFor(yaml) {
 function skillGapHint(jdPath) {
   if (!jdPath || !existsSync(jdPath)) return null;
   try {
-    // cwd is pinned deliberately: jd-skill-gap.mjs reads `const CV_PATH = 'cv.md'`
-    // relative to its cwd, so an inherited cwd made the child fail with
-    // "cv.md not found" (or, worse, classify against an unrelated cv.md) outside
-    // the data root, and this catch then hid the whole documented hint.
-    const out = execFileSync('node', [join(__dir, 'jd-skill-gap.mjs'), jdPath, '--json'], { encoding: 'utf8', maxBuffer: (1 << 22), cwd: CAREER_OPS }).trim();
+    // No cwd pin needed: jd-skill-gap.mjs resolves cv.md from the data root.
+    const out = execFileSync('node', [join(__dir, 'jd-skill-gap.mjs'), jdPath, '--json'], { encoding: 'utf8', maxBuffer: (1 << 22) }).trim();
     const parsed = JSON.parse(out);
     if (parsed.lowConfidence) return { lowConfidence: parsed.lowConfidence.reason || 'unparsable JD' };
     return { existing: (parsed.existing || []).length, supported: (parsed.supportedByResume || []).length, gaps: (parsed.gap || []).length };

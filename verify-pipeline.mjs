@@ -555,7 +555,10 @@ if (!existsSync(PORTALS_FILE)) {
       ...(Array.isArray(cfg.tracked_companies) ? cfg.tracked_companies : []),
       ...(Array.isArray(cfg.job_boards) ? cfg.job_boards : []),
     ];
-    const providers = await loadProviders(join(CAREER_OPS, 'providers'));
+    // providers/ is a system directory: it lives with the code, not in the
+    // (possibly relocated) data root. Reading it off the data root loaded zero
+    // providers, so every portals entry then warned that nothing claimed it.
+    const providers = await loadProviders(join(CODE_ROOT, 'providers'));
     const { silent, handoff, unknownProvider } = findUnclaimedEntries(entries, providers);
 
     // findUnclaimedEntries silently skips an entry with no (or blank) `name` —

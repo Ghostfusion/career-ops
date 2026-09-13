@@ -805,6 +805,11 @@ function onboardingState(root) {
     const templatePath = existsSync(rootTemplatePath) ? rootTemplatePath : join(__dirname, ...template.split('/'));
     if (!existsSync(targetPath) && existsSync(templatePath)) {
       try {
+        // A fresh data root has no modes/ yet, and copyFileSync does not create
+        // parents: the three modes/_*.md templates threw ENOENT here and were
+        // swallowed below, so onboarding "copied" only voice-dna.md and reported
+        // nothing about the rest.
+        mkdirSync(dirname(targetPath), { recursive: true });
         copyFileSync(templatePath, targetPath);
         autoCopied.push(target);
       } catch {
