@@ -24,13 +24,11 @@
  * Exit codes: 0 ok · 1 usage · 2 not-found · 4 write failure.
  */
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync, renameSync } from 'fs';
 import { resolveTrackerPath } from './tracker-utils.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow, extractTrackerReportNumbers } from './tracker-parse.mjs';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 const ledgerPath = join(CAREER_OPS, 'data', 'proof-points.tsv');
 const HEADER = `name\tstatus\turl\tblocks\tupdated\n`;
@@ -91,7 +89,7 @@ function readReportYaml(p) {
 function strip(s) { return String(s).trim().replace(/^(["'])(.*)\1$/, '$2'); }
 
 function openLaunchpadRows() {
-  const appsFile = resolveTrackerPath(__dir);
+  const appsFile = resolveTrackerPath(CAREER_OPS);
   if (!existsSync(appsFile)) return [];
   const lines = readFileSync(appsFile, 'utf8').split('\n');
   const colmap = resolveColumns(lines);

@@ -14,12 +14,10 @@
  *   node archetype-cv.mjs --json
  *   node archetype-cv.mjs --self-test
  */
-import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 
 let _cv = null;
@@ -33,7 +31,7 @@ function cv() {
 function cvSummary() { return cv().summary; }
 
 function archetypeNames() {
-  const p = join(__dir, 'config', 'profile.yml');
+  const p = join(CAREER_OPS, 'config', 'profile.yml');
   if (!existsSync(p)) return [];
   const t = readFileSync(p, 'utf8');
   return [...t.matchAll(/^\s*-\s+name:\s*"([^"]+)"/gm)].map((m) => m[1]);

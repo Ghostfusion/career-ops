@@ -25,15 +25,13 @@
  *
  * It never touches the tracker and only writes the story-bank.
  */
-import { fileURLToPath } from 'url';
 import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 const REPORTS = join(CAREER_OPS, 'reports');
-const BANK = join(__dir, 'interview-prep', 'story-bank.md');
+const BANK = join(CAREER_OPS, 'interview-prep', 'story-bank.md');
 
 // ── Block F row extraction ───────────────────────────────────────────────────
 function rowsOf(text) {

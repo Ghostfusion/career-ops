@@ -65,7 +65,7 @@ function resolveJdPath(reportPath) {
   const rest = file.replace(/^0*\d+-/, '');
   const companyPart = rest.split('-')[0];
   if (!companyPart) return null;
-  const base = join(__dir, 'jds');
+  const base = join(CAREER_OPS, 'jds');
   if (!existsSync(base)) return null;
   try {
     const hit = readdirSync(base).find((f) => f.startsWith(companyPart + '-'));

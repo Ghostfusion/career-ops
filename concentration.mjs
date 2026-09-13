@@ -16,16 +16,15 @@
  *   node concentration.mjs --json
  *   node concentration.mjs --self-test
  */
-import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
 import { resolveTrackerPath } from './tracker-utils.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { resolveColumns, isSeparatorRow, isHeaderRow } from './tracker-parse.mjs';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
+const CAREER_OPS = getCareerOpsRoot();
 
 function openRows() {
-  const apps = resolveTrackerPath(__dir);
+  const apps = resolveTrackerPath(CAREER_OPS);
   if (!existsSync(apps)) return [];
   const lines = readFileSync(apps, 'utf8').split('\n');
   let colmap = null;

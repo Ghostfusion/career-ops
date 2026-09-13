@@ -17,12 +17,10 @@
  *
  * Read-only — never writes.
  */
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 
 // ── report YAML read ─────────────────────────────────────────────────────────
@@ -72,7 +70,7 @@ function roleFamily(role) {
 
 function targetBand() {
   try {
-    const t = readFileSync(join(__dir, 'config', 'profile.yml'), 'utf8');
+    const t = readFileSync(join(CAREER_OPS, 'config', 'profile.yml'), 'utf8');
     const m = t.match(/target_range:\s*["']?([^"'\n]+)/);
     return m ? parseComp(m[1]) : null;
   } catch { return null; }
