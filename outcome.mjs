@@ -29,6 +29,7 @@ import { parseTrackerRow, resolveColumns, extractTrackerReportNumbers } from './
 // drift — they already had (#3315 shipped a 7-entry copy of these 14).
 import { OUTCOME_MAP } from './lib/outcome-types.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import {
   normalizeCompany,
   pathIsInsideCanonical,
@@ -40,10 +41,14 @@ import { resolveOutcomeDir } from './lib/outcome-dir.mjs';
 import { parsePdfIndex } from './find.mjs';
 import { findCaptureForReport } from './jd-capture.mjs';
 
-const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
+// The code checkout: sibling scripts (set-status, archive-posting) and their
+// cwd live here. Every user-layer file — the tracker above all — resolves from
+// the data root instead (getCareerOpsRoot()), which is what honours
+// CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR (#3510 family).
+const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 const NODE = process.execPath;
-const SET_STATUS_SCRIPT = join(CAREER_OPS, 'set-status.mjs');
-const ARCHIVE_POSTING_SCRIPT = join(CAREER_OPS, 'archive-posting.mjs');
+const SET_STATUS_SCRIPT = join(CODE_ROOT, 'set-status.mjs');
+const ARCHIVE_POSTING_SCRIPT = join(CODE_ROOT, 'archive-posting.mjs');
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 1;
@@ -142,7 +147,7 @@ if (!outcomeConfig) {
   failExit(`Invalid outcome_type "${rawOutcomeType}". Valid types: ${validTypes}`, 'invalid-outcome', EXIT_USAGE);
 }
 
-const appsFile = resolveTrackerPath(CAREER_OPS);
+const appsFile = resolveTrackerPath(getCareerOpsRoot());
 if (!existsSync(appsFile)) {
   failExit(`Tracker not found at ${appsFile}`, 'tracker-not-found', EXIT_NOT_FOUND);
 }
@@ -422,7 +427,7 @@ if (!resolvedPostingPath) {
 if (!resolvedPostingPath && targetUrl) {
   try {
     execFileSync(NODE, [ARCHIVE_POSTING_SCRIPT, targetUrl, `--company=${matchedRow.company}`, `--role=${matchedRow.role}`, `--report=${matchedRow.num}`], {
-      cwd: CAREER_OPS,
+      cwd: CODE_ROOT,
       env: process.env,
       stdio: 'ignore',
       timeout: 45000,
@@ -503,7 +508,7 @@ if (matchedRow.role) {
 
 let setStatusResult = null;
 try {
-  const statusOutput = execFileSync(NODE, setStatusArgs, { cwd: CAREER_OPS, env: process.env, encoding: 'utf-8' });
+  const statusOutput = execFileSync(NODE, setStatusArgs, { cwd: CODE_ROOT, env: process.env, encoding: 'utf-8' });
   setStatusResult = JSON.parse(statusOutput);
 } catch (err) {
   failExit(`Tracker update via set-status.mjs failed: ${err.message}`, 'tracker-update-failed', 1);

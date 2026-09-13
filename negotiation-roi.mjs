@@ -58,7 +58,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { parseStories } from './match-star.mjs';
@@ -66,9 +66,13 @@ import { flagValue, hasFlag } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-const STORY_BANK_PATH = join(CAREER_OPS, 'interview-prep', 'story-bank.md');
+// interview-prep/story-bank.md is USER layer (see DATA_CONTRACT.md), not a file
+// that ships with the checkout. Built from this module's own directory it read
+// `{checkout}/interview-prep/story-bank.md` whenever CAREER_OPS_ROOT or
+// CAREER_OPS_DATA_DIR pointed at the user's data root — two runs against
+// different data roots printed byte-identical output from the checkout's bank.
 const DATA_ROOT = getCareerOpsRoot();
+const STORY_BANK_PATH = join(DATA_ROOT, 'interview-prep', 'story-bank.md');
 const CV_PATH = join(DATA_ROOT, 'cv.md');
 
 // ── Frequency vocabulary ─────────────────────────────────────────────

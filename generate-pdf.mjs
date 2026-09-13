@@ -69,7 +69,7 @@ function refreshRootCache() {
   if (__rootCache.key !== key) {
     // Always re-derive: falling back to the import-time const when the variable
     // is unset would hand back the very value the poisoned import froze.
-    const root = resolveWorkspaceRoot(resolveTrackerPath(__dirname));
+    const root = resolveWorkspaceRoot(resolveTrackerPath(getCareerOpsRoot()));
     __rootCache = { key, root, canonical: realpathSync(root) };
   }
   return __rootCache;
