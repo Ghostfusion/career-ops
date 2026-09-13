@@ -20,10 +20,21 @@ import { fileURLToPath } from "url";
 import { parseArgs } from "util";
 import { assertFacts } from "./verify-cv-facts.mjs";
 import { resolveTemplate } from "./cv-templates.mjs";
+import { getCareerOpsRoot } from "./path-resolver.mjs";
+import { resolveTrackerPath, resolveWorkspaceRoot } from "./tracker-utils.mjs";
 import { isMainModule } from "./lib/is-main-module.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUTPUT_ROOT = resolve(__dirname, "output");
+// The workspace that owns the tracker — not this file's directory. With a
+// relocated data root (CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR) the old
+// `resolve(__dirname, "output")` pointed into the code checkout: it created
+// <checkout>/output/, and the render guard then refused the target as outside
+// the workspace, so the documented cover-letter flow produced no PDF at all.
+// Derived per call rather than at import for the reason generate-pdf.mjs
+// documents (#3159): a caller that changes CAREER_OPS_ROOT in-process would
+// otherwise freeze the wrong root here.
+function outputRoot() {
+  return resolve(resolveWorkspaceRoot(resolveTrackerPath(getCareerOpsRoot())), "output");
+}
 
 /**
  * Resolve a requested cover-letter output path.
@@ -59,15 +70,15 @@ export function safeOutputPath(raw) {
     : posix.startsWith("output/")
       ? posix.slice("output/".length)
       : posix;
-  const candidate = resolve(OUTPUT_ROOT, relativeToRoot);
+  const candidate = resolve(outputRoot(), relativeToRoot);
   if (containedInOutput(candidate)) return candidate;
 
   throw new Error(`Refusing to write the cover letter outside output/: ${raw}`);
 }
 
-/** True when absPath is a file (not output/ itself) still inside OUTPUT_ROOT. */
+/** True when absPath is a file (not output/ itself) still inside the output root. */
 function containedInOutput(absPath) {
-  const rel = relative(OUTPUT_ROOT, absPath);
+  const rel = relative(outputRoot(), absPath);
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
@@ -307,7 +318,7 @@ Usage:
   if (!payload.output_path) {
     const company = (payload.letter?.company || "company").toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const role    = (payload.letter?.role_title || "role").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30);
-    payload.output_path = join(OUTPUT_ROOT, `${company}-${role}-cover.pdf`);
+    payload.output_path = join(outputRoot(), `${company}-${role}-cover.pdf`);
   } else {
     try {
       payload.output_path = safeOutputPath(payload.output_path);
@@ -317,7 +328,8 @@ Usage:
     }
   }
 
-  if (!existsSync(OUTPUT_ROOT)) mkdirSync(OUTPUT_ROOT, { recursive: true });
+  const outRoot = outputRoot();
+  if (!existsSync(outRoot)) mkdirSync(outRoot, { recursive: true });
 
   try {
     const html = buildHtml(payload);

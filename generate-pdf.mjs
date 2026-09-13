@@ -5,13 +5,19 @@
  *
  * Usage:
  *   node career-ops/generate-pdf.mjs <input.html> <output.pdf> [--format=letter|a4] [--report=NNN] [--allow-reorder] [--max-pages=N] [--strict-pages] [--skip-fact-check]
- *   node career-ops/generate-pdf.mjs --batch=<manifest.json> [--format=letter|a4] [--allow-reorder] [--max-pages=N] [--strict-pages]
+ *   node career-ops/generate-pdf.mjs --batch=<manifest.json> [--format=letter|a4] [--allow-reorder] [--max-pages=N] [--strict-pages] [--skip-fact-check]
  *
  * --batch renders every document in a JSON manifest (an array of
  * {input, output, format?, reportNum?}) through ONE shared Chromium instead of
  * relaunching per document. One failing document is isolated and recorded; the
  * rest still render. Results are written to <manifest>.results.json and the
  * process exits non-zero if any document failed (#2384).
+ *
+ * --batch applies the same fact gate as a single render, per entry: an entry
+ * whose CV states a metric or fact its sources do not carry is recorded as that
+ * entry's failure (the gate used to run only on the single-document path, so a
+ * batch could ship documents the standalone render refuses). Pass
+ * --skip-fact-check to render unverified documents deliberately.
  *
  * --report links the generated PDF to its tracker/report number and records
  * the linkage in data/pdf-index.tsv so downstream tools (e.g. the TUI
@@ -1261,7 +1267,7 @@ async function generatePDF() {
       console.error('--report is not valid with --batch. Set "reportNum" per entry in the manifest instead.');
       process.exit(1);
     }
-    return runBatchFromManifest(batchManifestPath, { format, maxPages, strictPages, allowReorder });
+    return runBatchFromManifest(batchManifestPath, { format, maxPages, strictPages, allowReorder, skipFactCheck });
   }
 
   if (!inputPath || !outputPath) {
@@ -1417,7 +1423,7 @@ async function generatePDF() {
  * for success; it exits zero only when every document rendered.
  *
  * @param {string} manifestPath - Path to the JSON manifest.
- * @param {{format: string, maxPages: number, strictPages: boolean, allowReorder: boolean}} globals
+ * @param {{format: string, maxPages: number, strictPages: boolean, allowReorder: boolean, skipFactCheck: boolean}} globals
  * @returns {Promise<{ok: number, failed: number, results: Array}>}
  */
 async function runBatchFromManifest(manifestPath, globals) {
@@ -1514,6 +1520,23 @@ async function runBatchFromManifest(manifestPath, globals) {
       html = reorderCvSections(html, cvSectionOrder);
       validateCvSectionOrder(html, cvMarkdown, { allowReorder: globals.allowReorder });
       html = normalizeTextForATS(html).html;
+
+      // Same fact gate as the single render, on the document that prints. It
+      // used to run only on the single-document path, so --batch (the cron and
+      // batch-tailor route) shipped inflated metrics the standalone render
+      // refuses. Skipped when there is no cv.md to check against — which is also
+      // what lets the batch fixtures that copy this file alone run.
+      if (!globals.skipFactCheck && cvMarkdown) {
+        const { assertFacts } = await import('./verify-cv-facts.mjs');
+        const factCheck = assertFacts(html, { label: basename(entryInput) });
+        if (factCheck.configMissing) {
+          console.warn('⚠️  No config/cv-facts.json — forbidden/advisory phrase checks did not run.');
+        }
+        if (factCheck.verdict === 'warn') {
+          console.warn(`⚠️  CV fact check warning: ${basename(entryInput)}`);
+          for (const phrase of factCheck.warnings) console.warn(`  - advisory phrase: ${phrase}`);
+        }
+      }
 
       entries.push({
         _idx: i,

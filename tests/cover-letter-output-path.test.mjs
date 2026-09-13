@@ -10,6 +10,8 @@
 //   1. A path that stays inside output/ is honoured, subdirectory included.
 //   2. A path that would escape output/ is rejected — not silently rewritten.
 import { resolve, join, relative, isAbsolute } from 'path';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { pass, fail, ROOT } from './helpers.mjs';
 import { safeOutputPath } from '../generate-cover-letter.mjs';
 
@@ -81,3 +83,38 @@ checkThrows('nested traversal escape is refused', 'output/foo/../../etc/passwd')
 checkThrows('absolute path outside output/ is refused', resolve(ROOT, 'cover.pdf'));
 checkThrows('absolute path in /tmp is refused', join('/tmp', 'cover.pdf'));
 checkThrows('output/ itself (no filename) is refused', 'output');
+
+// --- A relocated data root moves the output root with it -------------------
+// The module resolved its output root once, at import, from its own directory,
+// so with CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR set the documented default
+// target was <checkout>/output — outside the tracker workspace, which the
+// render guard refuses: the cover-letter flow produced no PDF at all. Derived
+// per call now, so no re-import is needed and an in-process env change is safe
+// (restored below, because suites share one process).
+{
+  const restoreEnv = (name, value) => {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  };
+  const relocated = mkdtempSync(join(tmpdir(), 'career-ops-cover-root-'));
+  const otherWs = mkdtempSync(join(tmpdir(), 'career-ops-cover-ws-'));
+  const savedRoot = process.env.CAREER_OPS_ROOT;
+  const savedTracker = process.env.CAREER_OPS_TRACKER;
+  try {
+    process.env.CAREER_OPS_ROOT = relocated;
+    delete process.env.CAREER_OPS_TRACKER;
+    checkEqual('a relocated data root owns output/', safeOutputPath('cover.pdf'), join(relocated, 'output', 'cover.pdf'));
+
+    // A tracker in its own workspace decides where "output/" is.
+    process.env.CAREER_OPS_TRACKER = join(otherWs, 'applications.md');
+    checkEqual(
+      'a tracker elsewhere puts output/ in its workspace',
+      safeOutputPath('cover.pdf'),
+      join(otherWs, 'output', 'cover.pdf'),
+    );
+  } finally {
+    restoreEnv('CAREER_OPS_ROOT', savedRoot);
+    restoreEnv('CAREER_OPS_TRACKER', savedTracker);
+    for (const dir of [relocated, otherWs]) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}
